@@ -40,7 +40,7 @@ camera does:
   is done by the [TUFX](https://github.com/KSPModStewards/TUFX) mod's post-processing and needs TUFX
   installed; everything else works without it.
 
-For Kerbal Space Program 1.12.x. Needs [Keystone](https://github.com/IshiakiZ/ksp-keystone), which comes in the download.
+For Kerbal Space Program 1.12.x. Needs [Keystone](https://github.com/IshiakiZ/ksp-keystone), a separate download ([its page on SpaceDock](https://spacedock.info/mod/4665/Keystone)): this mod does not load without it.
 
 ![The evening sun behind a rocket: without the shafts of sunlight, and with them](src/NaturalLight/img/light-shafts.jpg)
 
@@ -81,7 +81,8 @@ game draws every one of them as bright as those in the light.*
 
 ## Install
 
-Copy the `Keystone` and `NaturalLight` folders from the download into your KSP `GameData`.
+Install [Keystone](https://github.com/IshiakiZ/ksp-keystone) first: it is a download of its own, and its `Keystone` folder goes into your KSP
+`GameData`. Then copy the `NaturalLight` folder from this mod's download into `GameData` beside it.
 It is on as installed.
 
 ## Settings
