@@ -1,0 +1,39 @@
+Natural Light @VERSION@
+for Kerbal Space Program 1.12.x
+
+Light as it really falls: from the sky and the ground in their own colours, from the other
+worlds in the sky, from a low sun that stays golden, from the flame of an engine, and by
+night from floodlights at the launch sites, the runway's lamps and the space centre's lit
+windows, instead of from the sun and one flat grey alone.
+And the picture developed as film would be: bright things glow instead of going blank white,
+light and shade are strong while the colours stay those of the light, and the camera's eye
+follows the brightness of the view.
+
+INSTALL
+  Copy both folders in this download (Keystone and NaturalLight) into your KSP's
+  GameData folder, and start the game. Keystone is the base this mod stands on; one copy
+  serves every mod that uses it. To remove the mod, delete the NaturalLight folder.
+
+USE
+  It is on as installed. Its settings are in the Keystone window: the keystone button on the
+  game's toolbar, or Option-K on a Mac and Alt-K elsewhere. Then turn to Natural Light. Each
+  part of it can be turned down or off by itself; the first setting puts all of it out.
+
+  Nights are dark, as they are: "Darkest" raises the least light there is, if they are too
+  dark to fly in.
+
+THE FILM LOOK NEEDS TUFX
+  The glow, the film curve, the contrast and the camera's eye are done by the TUFX mod's
+  post-processing (get TUFX from CKAN or its own page), as a layer over whatever TUFX profile
+  you use. Without TUFX the lights still work and the picture is the game's own.
+
+WHERE IT WORKS
+  Made and tried on a Mac, and tried on Windows 11: the lights at night, the shafts of
+  sunlight (its shaders are built for Direct3D as well as packed for OpenGL), the film look
+  with TUFX and the veil of weather with a weather mod. Where the searchlights stand
+  (0.10.3) and the camera's eye under cloud (0.10.4) came after that and have been tried on
+  the Mac only. Nobody has run it on Linux yet. It works beside Scatterer and EVE. Do not
+  use it together with PlanetShine or another mod that sets the game's ambient light: they
+  would fight.
+
+Everything else: https://github.com/IshiakiZ/ksp-natural-light
