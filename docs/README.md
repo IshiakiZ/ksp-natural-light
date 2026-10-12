@@ -5,6 +5,7 @@ the flame of an engine and the floodlights of a launch pad; the sun's light in s
 the picture developed as a film camera would develop it. The short version is on the repository's front
 page.
 
+* [The long description](The-long-description.md): everything the front page said before it was cut short, and what was tried on each system
 * [Settings](Settings.md)
 * [How it works](How-it-works.md)
 * [Limits](Limits.md)
