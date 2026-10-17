@@ -133,13 +133,13 @@ Shader "NaturalLight/Shafts"
                     float3 sum = ((float3)(0.0));
                     float keep = 1.0, all_ = 0.0;
                     float2 at = uv;
-                    [loop] for (int n = 0; n < 12; n++)
+                    { [loop] for (int n = 0; n < 12; n++)
                     {
                         sum += SampleLod(_ShaftRays, at, 0.0).rgb * keep;
                         all_ += keep;
                         keep *= _ShaftLook.w;
                         at += step2;
-                    }
+                    } }
                     result = float4(sum / all_, 1.0);
                     return result;
                 }

@@ -65,6 +65,7 @@ Shader "NaturalLight/Veil"
             float4 _VeilColour;     // rgb: its own light, lit from all round (as it shows); a: 1 if the depths run backwards (nearest is 1)
             float4 _VeilSun;     // xyz: towards the sun, in the camera's axes; w: how strongly what is in the air throws light forward (0 evenly, towards 1 all straight on)
             float4 _VeilSunColour;     // rgb: what the sun adds to it looking straight towards the sun (as it shows)
+            float4 _VeilSea;     // x: how high the camera is above the sea's level, m (0: no sea, or the camera is under it); y: the sea's radius, m; z: 1 if this camera's sea takes its veil in its own shader, and the pass leaves it alone
             Texture2D _CameraDepthTexture; SamplerState sampler_CameraDepthTexture;
 
             struct v2f
@@ -107,13 +108,28 @@ Shader "NaturalLight/Veil"
                 return abs(k) < 0.001 ? len * (1.0 - 0.5 * k) : soft / mu * (1.0 - exp(-k));
             }
 
+            // The same along a line that starts "top" metres under the weather's top, from a camera above it (top below nothing),
+            // and stays above it: counted in metres of the weather as thick as it is under its top. (Once written as how thick the
+            // weather is where the camera is, times thinning(): from a few hundred metres above a shallow fog the first is too small
+            // for the card and comes out nothing, the second too large and comes out infinite, and nothing times infinite is not a
+            // number. The ground and the sea under the camera, and everything drawn in front of them, came out black. Here each
+            // power of e is of a height above the top, and is at most 1.)
+            float thinningAbove(float top, float len, float mu, float soft)
+            {
+                float k = len * mu / soft;
+                float here = exp(top / soft);
+                return abs(k) < 0.001 ? here * len * (1.0 - 0.5 * k) : soft / mu * (here - exp((top - len * mu) / soft));
+            }
+
             float4 frag(v2f IN) : SV_Target
             {
                 float4 result = float4(0.0, 0.0, 0.0, 0.0);
                 float2 uv = IN.vs_TEXCOORD0;
                 float depth = SampleLod(_CameraDepthTexture, uv, 0.0).r;
-                // (nothing drawn there at all: at the very end of the depths, 1, or 0 where they run backwards)
-                float nothing = _VeilColour.a > 0.5 ? step(depth, 0.000001) : step(0.999999, depth);
+                // (nothing drawn there at all: at the very end of the depths, 1, or 0 where they run backwards. Exactly so, not nearly:
+                // the last millionth of the near camera's depths on OpenGL is the ground from 399.2 m to 400 m, which then had no veil
+                // from this camera's pass and none from the far one's, whose ground it covers: a clear line across the murk.)
+                float nothing = _VeilColour.a > 0.5 ? step(depth, 0.0) : step(1.0, depth);
                 if (nothing > 0.5 && _VeilUp.w < 0.5) discard;
                 float3 ray = float3((uv.x * 2.0 - 1.0) * _VeilView.x + _VeilView.z, (uv.y * 2.0 - 1.0) * _VeilView.y + _VeilView.w, 1.0);
                 float along = length(ray);
@@ -122,6 +138,24 @@ Shader "NaturalLight/Veil"
                 float ahead = 1.0 / (_ZBufferParams.z * depth + _ZBufferParams.w);
                 float far = nothing > 0.5 ? _VeilAir.w : ahead * along;
                 float mu = dot(dir, _VeilUp.xyz);
+                // (Over a sea the air ends at the water. A sea drawn after the depth picture is made is not in it: what is there is the
+                // ground under the water, further off, and deep water was veiled as if it were as far off as its bottom. Where the
+                // line of sight meets the sea's level first, that is how far the air goes: the level falls away from the camera's own
+                // by the square of the distance over twice the planet's radius. And a sea that takes its veil in its own shader
+                // (Natural Ocean's, where this pass comes before it is drawn) is left alone here, the ground under it too.)
+                if (_VeilSea.x > 0.0 && mu < 0.0)
+                {
+                    float under = mu * mu - 2.0 * _VeilSea.x / _VeilSea.y;
+                    if (under > 0.0)
+                    {
+                        float seaAt = 2.0 * _VeilSea.x / (-mu + sqrt(under));
+                        if (seaAt < far)
+                        {
+                            if (_VeilSea.z > 0.5) discard;
+                            far = seaAt;
+                        }
+                    }
+                }
                 float top = _VeilAir.y;
                 float soft = max(_VeilAir.z, 1.0);
                 float tau;
@@ -135,10 +169,9 @@ Shader "NaturalLight/Veil"
                 else
                 {
                     // ---- the camera above its top: thinner where it is, by how far above, and as thick as it gets once back under the top
-                    float here = exp(top / soft);
                     float toTop = mu < -0.00001 ? top / mu : 1.0e9;
-                    if (far <= toTop) tau = here * thinning(far, mu, soft);
-                    else tau = here * thinning(toTop, mu, soft) + (far - toTop);
+                    if (far <= toTop) tau = thinningAbove(top, far, mu, soft);
+                    else tau = thinningAbove(top, toTop, mu, soft) + (far - toTop);
                 }
                 float veiled = 1.0 - exp(-_VeilAir.x * tau);
                 // (its light: from all round, and towards the sun more, by a Henyey-Greenstein lobe made 1 straight towards the sun)

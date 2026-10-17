@@ -46,7 +46,7 @@ namespace NaturalLight
     [KSPAddon(KSPAddon.Startup.FlightAndKSC, false)]
     public sealed class Daylight : MonoBehaviour
     {
-        public const string Version = "0.10.4";
+        public const string Version = "0.11.0";
 
         static Mod mod;
         /// <summary>The mod's page in Keystone's window: for the parts of the mod that have something to say on it.</summary>

@@ -46,7 +46,11 @@ namespace NaturalLight
         // as soon as it is drawn), but before Scatterer copies the picture for its haze, which wipes whatever is drawn between its
         // copy and its haze; on the far camera after everything, the clouds included, which are behind the rain)
         readonly OnCamera near = new OnCamera { When = CameraEvent.BeforeImageEffectsOpaque };
-        readonly OnCamera far = new OnCamera { When = CameraEvent.AfterEverything };
+        // (The far camera's: after its see-through things and the clouds laid on with them, before anything is done to its
+        // finished picture. Until 2026-10-13 it was put after everything, and on this Mac, as the game stood that day,
+        // nothing of it showed: fog ended in a ruled line where the near camera's range does, with the far ground, the
+        // hills and the whole sky clear beyond it.)
+        readonly OnCamera far = new OnCamera { When = CameraEvent.BeforeImageEffects };
         Mesh sheet;
         float shown;                    // how much of it there is, eased (0 to 1): it comes and goes with the weather, and is not switched
 
@@ -126,6 +130,7 @@ namespace NaturalLight
             if (want > 0f && !tried) Load();
             if (shader == null || shown <= 0.001f || main == null || body == null)
             {
+                Shader.SetGlobalVector(idHandAir, Vector4.zero);
                 if (near.Cam != null || far.Cam != null) { Detach(near); Detach(far); }
                 Report = wanted && want > 0f && shader == null && why.Length > 0 ? "No veil of weather: " + why + "." : "";
                 return;
@@ -152,14 +157,33 @@ namespace NaturalLight
 #if DEV
             ownWas = own; sunWas = sun;
 #endif
-            Draw(near, Named("Camera 00"), false, up, toSun, alt, own, sun, forward);
-            Draw(far, Named("Camera 01"), true, up, toSun, alt, own, sun, forward);
+            // ---- the same numbers for any shader that draws after the veil is laid on and has to take its own (Natural
+            // Ocean's sea, drawn after the near camera's veil: without it the sea within 400 m stood clear in rain and fog)
+            Shader.SetGlobalVector(idHandAir, new Vector4(sigma * shown, top - (float)alt, soft, 0f));
+            Shader.SetGlobalVector(idHandColour, new Vector4(own.r, own.g, own.b, 0f));
+            Shader.SetGlobalVector(idHandSun, new Vector4(toSun.x, toSun.y, toSun.z, forward));
+            Shader.SetGlobalVector(idHandSunColour, new Vector4(sun.r, sun.g, sun.b, 0f));
+            // (a sea that says it takes its own veil: it writes the frame it last drew in; Sea.cs)
+            int stamp = Mathf.RoundToInt(Shader.GetGlobalFloat(idSeaVeils));
+            bool seaVeilsItself = stamp > 0 && Mathf.Abs(Time.frameCount % 1000000 - stamp) <= 3;
+            // (over a sea the air ends at the water, not at the ground under it)
+            seaHigh = body.ocean && alt > 0.0 ? (float)alt : 0f;
+            seaRadius = (float)body.Radius;
+            Camera first = Named("Camera 00"), second = Named("Camera 01");
+            // (where one camera draws everything, Direct3D 11, its pass has the sky as well; and a sea that takes its own
+            // veil is left alone by whichever pass comes before it is drawn: the near camera's, or the only one)
+            Draw(near, first, second == null, seaVeilsItself, up, toSun, alt, own, sun, forward);
+            Draw(far, second, true, false, up, toSun, alt, own, sun, forward);
             Report = "Weather in the air: seeing " + (sigma > 0f ? Far(3.912f / (sigma + 3.912f / 30000f)) : "far") + (shown < 0.99f ? " (" + Mathf.RoundToInt(100f * shown) + "%)" : "") + ".";
         }
 
         static string Far(float metres) => metres >= 2000f ? (metres / 1000f).ToString("F0") + " km" : (Mathf.Round(metres / 10f) * 10f).ToString("F0") + " m";
 
-        void Draw(OnCamera on, Camera cam, bool sky, Vector3 up, Vector3 toSun, double alt, Color own, Color sun, float forward)
+        float seaHigh, seaRadius = 600000f;
+        static readonly int idHandAir = Shader.PropertyToID("_WeatherVeilAir"), idHandColour = Shader.PropertyToID("_WeatherVeilColour"), idHandSun = Shader.PropertyToID("_WeatherVeilSun"),
+            idHandSunColour = Shader.PropertyToID("_WeatherVeilSunColour"), idSeaVeils = Shader.PropertyToID("_SeaVeilsItself");
+
+        void Draw(OnCamera on, Camera cam, bool sky, bool leaveSea, Vector3 up, Vector3 toSun, double alt, Color own, Color sun, float forward)
         {
             if (cam == null) { Detach(on); return; }
             if (on.Commands == null)
@@ -177,6 +201,7 @@ namespace NaturalLight
             on.Mat.SetVector("_VeilColour", new Vector4(own.r, own.g, own.b, SystemInfo.usesReversedZBuffer ? 1f : 0f));
             on.Mat.SetVector("_VeilSun", new Vector4(Vector3.Dot(toSun, t.right), Vector3.Dot(toSun, t.up), Vector3.Dot(toSun, t.forward), forward));
             on.Mat.SetVector("_VeilSunColour", new Vector4(sun.r, sun.g, sun.b, 0f));
+            on.Mat.SetVector("_VeilSea", new Vector4(seaHigh, seaRadius, leaveSea ? 1f : 0f, 0f));
             if (cam != on.Cam)
             {
                 Detach(on);
@@ -205,7 +230,13 @@ namespace NaturalLight
             if (body.ocean && ground < 0.0) ground = 0.0;
             float g = (float)ground;
             dust = Mathf.Clamp01(h.Dust);
-            if (h.Low.Kind == CloudKind.Fog && h.Low.Cover > 0.05f) { top = Mathf.Max(g + 20f, h.Low.Top); soft = Mathf.Max(15f, 0.25f * (top - g)); }
+            // (fog as deep as its kind makes it: ground fog a few tens of metres, with the sky clear above it; steam on
+            // water a few metres; sea fog and hill fog some hundreds)
+            // (and its top is a top: a lid of warmer air lies on a fog, and within a few metres to a few tens of metres above
+            // it the air is clear. Thinning out over a quarter of its depth, as it first did, a deep sea fog was still
+            // fog a hundred metres above itself.)
+            if (h.Fog > 0.02f && h.FogDeep > 1f) { top = g + Mathf.Max(4f, h.FogDeep); soft = Mathf.Clamp(0.12f * (top - g), 3f, 25f); }
+            else if (h.Low.Kind == CloudKind.Fog && h.Low.Cover > 0.05f) { top = Mathf.Max(g + 20f, h.Low.Top); soft = Mathf.Max(15f, 0.25f * (top - g)); }
             else if (h.Low.Kind == CloudKind.Dust && h.Low.Cover > 0.05f) { top = Mathf.Max(g + 200f, h.Low.Top); soft = Mathf.Max(100f, 0.3f * (top - g)); }
             else if (h.Rain > 0.005f)
             {

@@ -34,14 +34,25 @@ if [ -f src/NaturalLight/needs.txt ]; then
   done < src/NaturalLight/needs.txt
 fi
 
+# A companion library for the Harmony mod, where this mod has one (src/NaturalLightHarmony): built against this mod and against
+# Harmony, only where Harmony is installed in the game, and loaded by the game only where it is.
+HARMONY="$KSP_DIR/GameData/000_Harmony/0Harmony.dll"
+companion() {  # companion <folder the mod's own library is in>
+  [ -d src/NaturalLightHarmony ] || return 0
+  if [ -f "$HARMONY" ]; then WITH="$KEYSTONE:$1/NaturalLight.dll:$HARMONY" compile "$1/NaturalLightHarmony.dll" "" src/NaturalLightHarmony
+  else rm -f "$1/NaturalLightHarmony.dll"; echo "left out: NaturalLightHarmony (Harmony is not installed here to build it against)"; fi
+}
+
 case "$MODE" in
   check)
     WITH="$KEYSTONE" compile "$TMP/NaturalLight.dll" "" src/NaturalLight
+    companion "$TMP"
     echo "ok: compiles"
     ;;
   dist|install)
     mkdir -p "$OUT"
     WITH="$KEYSTONE" compile "$OUT/NaturalLight.dll" "" src/NaturalLight
+    companion "$OUT"
     # (the mod's own shaders, if it has any: made by tools/shaderpack/make_bundle.py and kept ready made in src/NaturalLight/Shaders)
     if ls src/NaturalLight/Shaders/*.bundle >/dev/null 2>&1; then mkdir -p "$OUT/PluginData"; cp src/NaturalLight/Shaders/*.bundle "$OUT/PluginData/"; fi
     # (and anything else it keeps in src/NaturalLight/PluginData: a craft file, say)
@@ -49,6 +60,8 @@ case "$MODE" in
     if [ "$MODE" = dist ]; then echo "ok: built into $OUT"; exit 0; fi
     mkdir -p "$KSP_DIR/GameData/NaturalLight"
     cp "$OUT/NaturalLight.dll" "$KSP_DIR/GameData/NaturalLight/"
+    rm -f "$KSP_DIR/GameData/NaturalLight/NaturalLightHarmony.dll"
+    [ -f "$OUT/NaturalLightHarmony.dll" ] && cp "$OUT/NaturalLightHarmony.dll" "$KSP_DIR/GameData/NaturalLight/"
     if [ -d "$OUT/PluginData" ]; then mkdir -p "$KSP_DIR/GameData/NaturalLight/PluginData"; cp -R "$OUT/PluginData/." "$KSP_DIR/GameData/NaturalLight/PluginData/"; fi
     echo "ok: Natural Light installed to $KSP_DIR/GameData/NaturalLight (restart KSP to load it; it needs Keystone there too)"
     ;;
