@@ -11,6 +11,8 @@ eye follows the brightness of the view.
 
 ![The evening sun behind a rocket: without the shafts of sunlight, and with them](src/NaturalLight/img/light-shafts.jpg)
 
+![The evening sun behind the rocket on the pad, its light coming round in shafts](src/NaturalLight/img/natural-light-shafts.gif)
+
 For Kerbal Space Program 1.12.x. **Needs [Keystone](https://github.com/IshiakiZ/ksp-keystone) 0.8 or later**, a separate download
 ([on SpaceDock](https://spacedock.info/mod/4665/Keystone)): this mod does not load without it. The film look needs
 [TUFX](https://github.com/KSPModStewards/TUFX); everything else works without it.
