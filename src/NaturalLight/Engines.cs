@@ -38,6 +38,17 @@ namespace NaturalLight
             public float Power;             // kilonewtons, weighted by how brightly the fuel burns
             public Color Tint;
             public float Side;              // (to tell two alike apart the same way every frame)
+            public Transform Ride;          // the model of the first engine's part, which its lamps hang from (see Hang)
+        }
+
+        /// <summary>
+        /// A lamp hung from the model of the part whose flame it lights, so that it goes wherever that is drawn: the Smooth Running
+        /// mod carries the craft's models on between the game's physics steps, and a lamp left loose in the scene would stand behind
+        /// its flame by up to a step (six metres at three hundred metres a second). Placed in the scene's terms all the same.
+        /// </summary>
+        static void Hang(Light lamp, Transform on)
+        {
+            if (lamp != null && on != null && lamp.transform.parent != on) lamp.transform.SetParent(on, true);
         }
 
         readonly Light[] lamps = new Light[Most];
@@ -60,6 +71,20 @@ namespace NaturalLight
             foreach (AssemblyLoader.LoadedAssembly a in AssemblyLoader.loadedAssemblies)
                 if (a.name != null && a.name.Equals("EngineLight", StringComparison.OrdinalIgnoreCase)) others = true;
             if (others) Keystone.Kit.Log("Natural Light", "engine light is left to the Engine Lighting mod, which is installed");
+        }
+
+        void Start()
+        {
+            // (the lamps made now, and put out, and not at the first lift-off, where making seven lights at once was 8 ms of a stall:
+            // 2026-10-18. The card's work for the first light of each kind is done ahead too, by the explosions mod's faint lights.)
+            if (others) return;
+            for (int n = 0; n < Most; n++) { lamps[n] = Lamp("Natural Light engine flame " + n, n == 0); lamps[n].enabled = false; }
+            for (int n = 0; n < Full; n++)
+                for (int k = 0; k < Along + Round; k++)
+                {
+                    Light l = soft[n * (Along + Round) + k] = Lamp("Natural Light engine flame " + n + (k < Along ? " side " + k : " off the ground " + (k - Along)), false);
+                    l.enabled = false;
+                }
         }
 
         void OnDestroy()
@@ -151,7 +176,7 @@ namespace NaturalLight
                     // Engines within a few metres of one another share a flame.
                     Group mine = null;
                     foreach (Group g in groups) if ((g.At - at).sqrMagnitude < 6f * 6f) { mine = g; break; }
-                    if (mine == null) groups.Add(new Group { At = at, Along = along, Power = power, Tint = tint, Side = Vector3.Dot(at - frame.position, frame.right) + 0.37f * Vector3.Dot(at - frame.position, frame.forward) });
+                    if (mine == null) groups.Add(new Group { At = at, Along = along, Power = power, Tint = tint, Side = Vector3.Dot(at - frame.position, frame.right) + 0.37f * Vector3.Dot(at - frame.position, frame.forward), Ride = e.part.transform.Find("model") });
                     else
                     {
                         float share = power / (mine.Power + power);
@@ -207,6 +232,7 @@ namespace NaturalLight
                 // Where the flame leaves the engine: so that it lights what a flame would, the engine's own bell and the ground under it.
                 Light lamp = lamps[n];
                 lamp.enabled = true;
+                Hang(lamp, g.Ride);
                 lamp.transform.position = g.At + g.Along * Mathf.Min(0.8f + 0.12f * length, Mathf.Max(0.15f, room - 0.4f));
                 lamp.color = g.Tint;
                 lamp.range = reach;
@@ -229,6 +255,7 @@ namespace NaturalLight
                     Light l = soft[first + k];
                     if (l == null) l = soft[first + k] = Lamp("Natural Light engine flame " + n + " side " + k, false);
                     l.enabled = true;
+                    Hang(l, g.Ride);
                     float turn = (k * 120f + 15f) * Mathf.Deg2Rad;
                     l.transform.position = g.At + g.Along * Mathf.Min(0.35f * length, Mathf.Max(0.3f, room - 0.5f)) + (across * Mathf.Cos(turn) + other * Mathf.Sin(turn)) * girth;
                     l.color = g.Tint;

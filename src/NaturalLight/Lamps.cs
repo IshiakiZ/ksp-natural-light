@@ -28,6 +28,7 @@ namespace NaturalLight
         /// <summary>The lamps of one of the game's lamp meshes (a stretch of the runway's rows, a corner lamp).</summary>
         sealed class Row
         {
+            public Vector3 FacedFrom = new Vector3(float.MaxValue, 0f, 0f), FacedRight, FacedUp;     // the camera when its cards were last turned, in its own space
             public string Name;
             public Transform At;                                            // the game's own lamp mesh: everything of this hangs under it, and is hidden with it
             public Renderer Shown;
@@ -332,12 +333,19 @@ namespace NaturalLight
             }
         }
 
+        int facedAt = -1;
+        Vector3 facedFrom, facedRight, facedUp;
+
         /// <summary>Each lamp's glow is a card turned to face whichever camera is about to draw it, and larger with distance.</summary>
         void Face(Camera cam)
         {
             if (cam == null || rows.Count == 0 || cam.targetTexture != null || (cam.cullingMask & (1 << 15)) == 0) return;
             Transform eye = cam.transform;
             Vector3 from = eye.position, right = eye.right, up = eye.up;
+            // (On OpenGL the scene is drawn by two cameras, the near and the far, standing at the same place and turned the same way:
+            // the cards turned for the one are turned for the other. Done again for each, it was a third of a millisecond a frame.)
+            if (Time.frameCount == facedAt && from == facedFrom && right == facedRight && up == facedUp) return;
+            facedAt = Time.frameCount; facedFrom = from; facedRight = right; facedUp = up;
             foreach (Row row in rows)
             {
                 if (row.Glows == null || !row.Glows.enabled || row.GlowMesh == null || row.Lamps == null) continue;
@@ -347,6 +355,9 @@ namespace NaturalLight
                 Vector3 r = toLocal.MultiplyVector(right).normalized, u = toLocal.MultiplyVector(up).normalized;
                 Vector3[] corners = row.GlowCorners;
                 Vector3 eyeHere = toLocal.MultiplyPoint3x4(from);
+                // (and a row the camera has not moved against since it was last turned, in the row's own space, is as it was)
+                if ((eyeHere - row.FacedFrom).sqrMagnitude < 1e-4f && Vector3.Dot(r, row.FacedRight) > 0.999999f && Vector3.Dot(u, row.FacedUp) > 0.999999f) continue;
+                row.FacedFrom = eyeHere; row.FacedRight = r; row.FacedUp = u;
                 for (int k = 0; k < row.Spots.Length; k++)
                 {
                     Vector3 lamp = row.Lamps[k];

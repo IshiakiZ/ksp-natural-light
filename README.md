@@ -13,7 +13,7 @@ eye follows the brightness of the view.
 
 ![The evening sun behind the rocket on the pad, its light coming round in shafts](src/NaturalLight/img/natural-light-shafts.gif)
 
-For Kerbal Space Program 1.12.x. **Needs [Keystone](https://github.com/IshiakiZ/ksp-keystone) 0.8 or later**, a separate download
+For Kerbal Space Program 1.12.x. **Needs [Keystone](https://github.com/IshiakiZ/ksp-keystone) 0.9 or later**, a separate download
 ([on SpaceDock](https://spacedock.info/mod/4665/Keystone)): this mod does not load without it. The film look needs
 [TUFX](https://github.com/KSPModStewards/TUFX); everything else works without it.
 
@@ -26,6 +26,9 @@ For Kerbal Space Program 1.12.x. **Needs [Keystone](https://github.com/IshiakiZ/
 * **Shafts of sunlight** round whatever stands in front of the sun, a deep sky of nebulae and coloured stars, and a
   cabin and a ground crew lit by where they are.
 * **Weather in the light,** with Natural Weather: dim under cloud, the distance veiled by rain, fog and dust.
+* **Eclipses and cloud tops** (0.12.0): another world before the sun dims the day (the Mun over Kerbin; Kerbin's copper shadow at
+  the Mun); over a cloud deck a craft is lit from below by the bright tops; a craft's lamps show their beams in fog and rain;
+  red lamps on the space centre's tall buildings by night; aeroplanes' wingtip, tail and strobe lights.
 * **A film look** (with TUFX): a film curve, glow, and an exposure that opens in the dark and shuts for anything
   bright.
 
@@ -36,7 +39,7 @@ Copy the `NaturalLight` folder from the download into your KSP's `GameData`, bes
 ## Settings
 
 In the Keystone window: the keystone button on the game's toolbar, or Alt-K (Option-K on a Mac). Each part can be
-turned down or off by itself. [What each one does](docs/Settings.md).
+turned down or off by itself. [What each one does](https://github.com/IshiakiZ/ksp-natural-light/wiki/Settings).
 
 ## Good to know
 
@@ -47,10 +50,11 @@ turned down or off by itself. [What each one does](docs/Settings.md).
 
 ## Works on
 
-Mac: tried. Windows 11 (Direct3D 11 and OpenGL): 0.10.2 tried; this version built for it, not run there. Linux: never run.
+Mac: tried. Windows 11 (Direct3D 11 and OpenGL): 0.10.2 tried; this version run on both on 2026-10-20 (its shaders loaded, on through
+every look of that day's checks), its own looks not tried there. Linux: never run.
 
-**More:** [the long description](docs/The-long-description.md) (everything in full, more
-pictures, and what was tried on each system) and the rest of the [wiki](docs/README.md).
+**More:** [the long description](https://github.com/IshiakiZ/ksp-natural-light/wiki/The-long-description) (everything in full, more
+pictures, and what was tried on each system) and the rest of the [wiki](https://github.com/IshiakiZ/ksp-natural-light/wiki).
 
 ## Licence
 

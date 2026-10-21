@@ -62,6 +62,7 @@ namespace NaturalLight
 
         float found = float.NaN, filled;    // how bright the view was last found to be (as light), and how much of it was not black
         float eye;                          // how far the eye is open by now, in stops
+        static int badReadings;             // how often a reading or the eye itself was not a number (see Meter), since the game began
         float nextRead;
 
         void Awake()
@@ -158,6 +159,9 @@ namespace NaturalLight
         /// <summary>Whether the camera's picture is copied at its own size before it is shrunk (see Hook).</summary>
         static bool WholeFirst = false;
 #if DEV
+        /// <summary>(For the development build: what the eye reads and where it stands, and how often a reading was not a number.)</summary>
+        public static string Eye() => Report + " (readings not a number: " + badReadings + ")";
+
         /// <summary>(For the development build: the camera's picture copied whole before it is shrunk, or not; and the small picture the eye measures then.)</summary>
         public static string Whole()
         {
@@ -227,11 +231,33 @@ namespace NaturalLight
             catch (Exception) { }
         }
 
+        /// <summary>
+        /// The camera whose picture the eye reads: the last of the scene's own to draw. In a cockpit that is the camera of the cockpit's
+        /// insides, which draws over the view out of the windows: so the eye reads the cabin and the window together, and opens for a
+        /// dim cabin as an eye inside it would (and closes again when the window fills the view). Until 0.12 it read the view out
+        /// alone, and the cabin's own brightness counted for nothing.
+        /// </summary>
         static Camera Last()
         {
-            foreach (Camera cam in Camera.allCameras) if (cam != null && cam.name == "Camera 00" && cam.isActiveAndEnabled) return cam;
+            CameraManager cameras = CameraManager.Instance;
+            if (cameras != null && (cameras.currentCameraMode == CameraManager.CameraMode.IVA || cameras.currentCameraMode == CameraManager.CameraMode.Internal))
+            {
+                InternalCamera inner = InternalCamera.Instance;
+                Camera c = inner != null ? inner.GetComponent<Camera>() : null;
+                if (c != null && c.isActiveAndEnabled) return c;
+            }
+            Camera near = Keystone.Names.CameraNamed("Camera 00"); if (near != null) return near;
             return null;
         }
+
+#if DEV
+        /// <summary>(For the development build: the camera whose picture the eye reads.)</summary>
+        internal static string MeteredName { get { FilmLook me = FindObjectOfType<FilmLook>(); return me != null && me.metered != null ? me.metered.name : "none"; } }
+#endif
+        /// <summary>How bright the brightest part of the view may come out in a cockpit (the windows), against 0.35 outside.</summary>
+        internal static float CockpitBears = 1.4f;
+
+        static bool InCockpit(Camera cam) => cam != null && InternalCamera.Instance != null && cam.gameObject == InternalCamera.Instance.gameObject;
 
         bool Wanted => Daylight.On && Daylight.Filmed != null && Daylight.Filmed && Daylight.Near && !MapView.MapIsEnabled;
 
@@ -245,7 +271,9 @@ namespace NaturalLight
         /// </summary>
         void Read()
         {
-            if (small == null || read == null || !small.IsCreated() || Time.unscaledTime < nextRead) return;
+            if (small == null || read == null || !small.IsCreated()) return;
+            if (!SystemInfo.supportsAsyncGPUReadback && ReadLater()) return;
+            if (Time.unscaledTime < nextRead) return;
             if (SystemInfo.supportsAsyncGPUReadback)
             {
                 nextRead = Time.unscaledTime + 0.12f;
@@ -280,6 +308,55 @@ namespace NaturalLight
                 Weigh(read.GetPixels(), small.width, small.height);
             }
             catch (Exception) { }
+        }
+
+        // ---- On OpenGL (the Mac's), where Unity has no asynchronous read: through Keystone's Readback, which reads by Volumetric
+        // Explosions' library without the game waiting, when that is installed. Read at once at the start of a frame, as before,
+        // the read still waited for whatever the card had left of the last frame: on a cloudy pad most of it, three times a
+        // second (research/rendering/audit/README.md, 2). In two halves, paired by the number they were asked with: the
+        // picture (up to 96 x 54 half floats) is larger than one such read may be (64 KB as floats).
+        Keystone.Readback lower, upper;
+        static bool readLater;
+        int readW, readH;
+        long pairs, gotLower = -1, gotUpper = -2;
+        float[] lowerDots, upperDots;
+
+        /// <summary>The read by Keystone's Readback, where it comes back later; false where it would read at once (then as before).</summary>
+        bool ReadLater()
+        {
+            int w = small.width, h = small.height, half = (h + 1) / 2;
+            if (lower == null || readW != w || readH != h)
+            {
+                lower?.Free(); upper?.Free();
+                lower = new Keystone.Readback(w, half, true); upper = new Keystone.Readback(w, h - half, true);
+                readW = w; readH = h; gotLower = -1; gotUpper = -2;
+            }
+            if (!lower.Later || !upper.Later) { readLater = false; return false; }
+            readLater = true;
+            if (lower.Take(out object a) && a is long la) { gotLower = la; Floats(lower.Bytes, w * half, ref lowerDots); }
+            if (upper.Take(out object b) && b is long lb) { gotUpper = lb; Floats(upper.Bytes, w * (h - half), ref upperDots); }
+            if (gotLower == gotUpper)
+            {
+                if (dots == null || dots.Length != w * h) dots = new Color[w * h];
+                for (int i = 0; i < w * half; i++) dots[i] = new Color(lowerDots[i * 4], lowerDots[i * 4 + 1], lowerDots[i * 4 + 2], 1f);
+                for (int i = 0; i < w * (h - half); i++) dots[w * half + i] = new Color(upperDots[i * 4], upperDots[i * 4 + 1], upperDots[i * 4 + 2], 1f);
+                Weigh(dots, w, h);
+                gotLower = -1; gotUpper = -2;
+            }
+            if (Time.unscaledTime >= nextRead)
+            {
+                nextRead = Time.unscaledTime + 0.12f;
+                pairs++;
+                lower.Ask(small, 0, 0, w, half, pairs);
+                upper.Ask(small, 0, half, w, h - half, pairs);
+            }
+            return true;
+        }
+
+        static void Floats(byte[] bytes, int pixels, ref float[] into)
+        {
+            if (into == null || into.Length != pixels * 4) into = new float[pixels * 4];
+            Buffer.BlockCopy(bytes, 0, into, 0, Math.Min(bytes.Length, pixels * 16));
         }
 
         bool asking;
@@ -435,7 +512,7 @@ namespace NaturalLight
 
         static Color peak; static int over, dotsRead; static string where = "";
         /// <summary>(For the development build: the brightest the small picture got, and how many of its dots are brighter than white: whether the game is really keeping more than white, and for what.)</summary>
-        public static string Peak() => (SystemInfo.supportsAsyncGPUReadback ? "read without waiting; " : "read at the start of a frame; ") + "brightest " + peak.r.ToString("F2") + " " + peak.g.ToString("F2") + " " + peak.b.ToString("F2") + "; " + over + " of " + dotsRead + " dots over white; " + where;
+        public static string Peak() => (SystemInfo.supportsAsyncGPUReadback ? "read without waiting; " : readLater ? "read without waiting, by Volumetric Explosions' library; " : "read at the start of a frame; ") + "brightest " + peak.r.ToString("F2") + " " + peak.g.ToString("F2") + " " + peak.b.ToString("F2") + "; " + over + " of " + dotsRead + " dots over white; " + where;
 #endif
 
         /// <summary>
@@ -515,7 +592,11 @@ namespace NaturalLight
                 grade.glowTint = new Color(1f, 0.985f, 0.96f);
             }
             grade.glow = 0.85f * glow;
-            grade.glowFrom = 1.0f;
+            // (The glow from what shows as white, whatever the eye: Unity's glow is worked out from the light before the eye's exposure
+            // is put on it, so from a fixed 1.0, as until 2026-10-18, it began at white only with the eye as by day. With the eye
+            // opened three stops for the night, lamps and fires that show white had none (they were an eighth of 1.0 in the
+            // light); and anything far brighter than white threw a halo many times its size whatever the eye did.)
+            grade.glowFrom = Mathf.Pow(2f, -grade.exposure);
             grade.glowWide = 7.5f;
             grade.nooks = 0.62f * creases;
             grade.corners = 0.42f * marks;
@@ -551,7 +632,12 @@ namespace NaturalLight
 
             sunIn = Vector3.zero;
             if (cam != null && Daylight.Near && Planetarium.fetch != null && Planetarium.fetch.Sun != null)
-                sunIn = cam.WorldToViewportPoint(cam.transform.position + ((Vector3)(Planetarium.fetch.Sun.position - Daylight.Here)).normalized * 1000f);
+            {
+                Vector3 toSun = ((Vector3)(Planetarium.fetch.Sun.position - Daylight.Here)).normalized;
+                // (the cockpit's camera stands in the cockpits' own space, which turns with the craft)
+                if (InCockpit(cam) && InternalSpace.Instance != null && FlightGlobals.ActiveVessel != null) toSun = Quaternion.Inverse(InternalSpace.InternalToWorld(Quaternion.identity)) * toSun;
+                sunIn = cam.WorldToViewportPoint(cam.transform.position + toSun * 1000f);
+            }
             float wanted = 0f;
             if (!float.IsNaN(view) && follows > 0f)
             {
@@ -563,7 +649,11 @@ namespace NaturalLight
                 float open = Mathf.Max(0f, Mathf.Log(Middle / Mathf.Max(view, 1e-6f), 2f)) * 0.6f * follows;
                 // (At the space centre, seen from above, the buildings have to be found to be clicked on, whatever lit windows
                 // and floodlights are in sight: there the bright things hold it back much less.)
-                open = Mathf.Min(open, Mathf.Log((HighLogic.LoadedSceneIsFlight ? 0.35f : 2.2f) / Mathf.Max(top, 1e-6f), 2f));
+                // (And in a cockpit the windows are not a small bright thing in the dark but a good share of the view: a camera inside a
+                // cabin opens for the cabin and lets its windows go pale, which is how every picture taken inside a capsule or a cockpit
+                // by day looks. So there they may come to four times what is borne outside, which the film's shoulder rolls over into a
+                // pale glow with the view still in it.)
+                open = Mathf.Min(open, Mathf.Log((!HighLogic.LoadedSceneIsFlight ? 2.2f : InCockpit(metered) ? CockpitBears : 0.35f) / Mathf.Max(top, 1e-6f), 2f));
                 open = Mathf.Clamp(open, 0f, 3.2f * Mathf.Min(follows, 1.25f));
                 // In the light it closes: by two thirds of how bright what is in view is, and further for a view full of
                 // something much brighter than white (a flame from close to), until that is only twice white or so. By how
@@ -595,9 +685,15 @@ namespace NaturalLight
                 // bright sky notwithstanding", every heap in sight went to plain white whenever a cloud's shadow crossed the pad.)
                 wanted = Mathf.Max(wanted, Mathf.Min(Mathf.Min(0.6f * Daylight.Clouded * follows, Mathf.Max(0f, Mathf.Log(0.42f / Mathf.Max(view, 1e-6f), 2f))), 3.2f * Mathf.Min(follows, 1.25f)));
             }
+            // (A reading that is not a number, or an infinite one, leaves the eye where it is; and an eye that has become one is opened
+            // as at the start. Taken in without this, one such reading made the eye not a number, and every picture after it black
+            // for good: the ground seen after the hurricane from 200 km, the evening of 2026-10-18, with the clouds switched off and
+            // the view cut to the map and back.)
+            if (float.IsNaN(wanted) || float.IsInfinity(wanted)) { wanted = float.IsNaN(eye) || float.IsInfinity(eye) ? 0f : eye; badReadings++; }
             // (it closes fast and opens slowly, as eyes do: coming out of the light it is some seconds before the dark shows anything)
             float rate = wanted < eye ? 3f : 0.45f;
             eye = Mathf.MoveTowards(eye, wanted, rate * Mathf.Min(Time.unscaledDeltaTime, 0.1f));
+            if (float.IsNaN(eye) || float.IsInfinity(eye)) { eye = 0f; badReadings++; }
             Opened = eye;
             // (by how much brighter the brightest thing in view is than the sky itself can be: the sky's own nebulae must not
             // put its stars out)

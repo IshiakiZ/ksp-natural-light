@@ -56,6 +56,9 @@ namespace NaturalLight
 
         // what the weather says, looked up a few times a second
         float sigma, top, soft, dust, snow, lookedAt = -10f;
+        float floor;                    // the weather's floor: the ground or the sea under the camera (m above the sea's level)
+        bool lidLit;                    // whether what lies under its top is lit from above by the sun on it (fog, dust, haze; not rain)
+        float backUp;                   // how much of the sunlight its top throws back up, seen from over it (0 to 1; see LateUpdate)
         Color dustColour = new Color(0.8f, 0.5f, 0.3f);
 
         static void Load()
@@ -101,7 +104,7 @@ namespace NaturalLight
 
         static Camera Named(string name)
         {
-            foreach (Camera cam in Camera.allCameras) if (cam != null && cam.name == name && cam.isActiveAndEnabled) return cam;
+            Camera named = Keystone.Names.CameraNamed(name); if (named != null) return named;
             return null;
         }
 
@@ -153,6 +156,14 @@ namespace NaturalLight
             if (dust > 0.01f) sun = Color.Lerp(sun, sun * dustColour, Mathf.Clamp01(dust * 1.5f));
             // (how forward: drops far more than flakes, and both more than the finer dust)
             float forward = Mathf.Lerp(Mathf.Lerp(0.8f, 0.6f, snow), 0.55f, Mathf.Clamp01(dust * 2f));
+            // ---- and seen from over its top, the sunlight it throws back up. From above, a sea fog in the sun is a white sheet,
+            // as the top of any cloud is; lit by the light from all round alone, it was a flat dark grey plane (the main chat,
+            // 2026-10-18: from 1.7 km over a fog 123 m deep). By the rule the clouds' own shader lights a cloud by, what a layer
+            // lets through is 1 / (1 + 0.75 (1 - g) tau) and what it does not comes back out of its top: tau its whole depth from
+            // floor to top, g 0.85 for drops and 0.7 for dust and haze; by how high the sun stands. (Not rain's: it falls from
+            // under a cloud, in the cloud's shade.)
+            float tauV = sigma * Mathf.Max(top - floor, 0f), gv = dust > 0.01f || top - floor >= 1499f ? 0.7f : 0.85f;
+            backUp = lidLit ? (1f - 1f / (1f + 0.75f * (1f - gv) * tauV)) * Mathf.Max(0f, Vector3.Dot(up, toSun)) : 0f;
 
 #if DEV
             ownWas = own; sunWas = sun;
@@ -162,7 +173,7 @@ namespace NaturalLight
             Shader.SetGlobalVector(idHandAir, new Vector4(sigma * shown, top - (float)alt, soft, 0f));
             Shader.SetGlobalVector(idHandColour, new Vector4(own.r, own.g, own.b, 0f));
             Shader.SetGlobalVector(idHandSun, new Vector4(toSun.x, toSun.y, toSun.z, forward));
-            Shader.SetGlobalVector(idHandSunColour, new Vector4(sun.r, sun.g, sun.b, 0f));
+            Shader.SetGlobalVector(idHandSunColour, new Vector4(sun.r, sun.g, sun.b, backUp));
             // (a sea that says it takes its own veil: it writes the frame it last drew in; Sea.cs)
             int stamp = Mathf.RoundToInt(Shader.GetGlobalFloat(idSeaVeils));
             bool seaVeilsItself = stamp > 0 && Mathf.Abs(Time.frameCount % 1000000 - stamp) <= 3;
@@ -200,8 +211,9 @@ namespace NaturalLight
             on.Mat.SetVector("_VeilAir", new Vector4(sigma * shown, top - (float)alt, soft, 60000f));
             on.Mat.SetVector("_VeilColour", new Vector4(own.r, own.g, own.b, SystemInfo.usesReversedZBuffer ? 1f : 0f));
             on.Mat.SetVector("_VeilSun", new Vector4(Vector3.Dot(toSun, t.right), Vector3.Dot(toSun, t.up), Vector3.Dot(toSun, t.forward), forward));
-            on.Mat.SetVector("_VeilSunColour", new Vector4(sun.r, sun.g, sun.b, 0f));
-            on.Mat.SetVector("_VeilSea", new Vector4(seaHigh, seaRadius, leaveSea ? 1f : 0f, 0f));
+            on.Mat.SetVector("_VeilSunColour", new Vector4(sun.r, sun.g, sun.b, backUp));
+            CelestialBody world = FlightGlobals.currentMainBody;
+            on.Mat.SetVector("_VeilSea", new Vector4(seaHigh, seaRadius, leaveSea ? 1f : 0f, world != null ? (float)world.Radius : 600000f));
             if (cam != on.Cam)
             {
                 Detach(on);
@@ -220,7 +232,7 @@ namespace NaturalLight
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         void Look(CelestialBody body, Vector3 camera)
         {
-            sigma = 0f; snow = 0f;
+            sigma = 0f; snow = 0f; lidLit = true;
             if (!Keystone.Weather.There) return;
             double lat = body.GetLatitude((Vector3d)camera), lon = body.GetLongitude((Vector3d)camera);
             WeatherHere h = Keystone.Weather.At(body, lat, lon, Planetarium.GetUniversalTime());
@@ -242,10 +254,17 @@ namespace NaturalLight
             {
                 // (rain and snow fall from the cloud's base: as thick as they are up to it; a shower's base when there is no low layer)
                 top = h.Low.Cover > 0.15f && h.Low.Base > g + 50f ? h.Low.Base : g + 1500f;
+                lidLit = false;
                 soft = 200f;
                 snow = Mathf.Clamp01(h.Snow);
             }
-            else { top = g + 1500f; soft = 800f; }
+            // (and haze, the weather's own on a clear day's: it fills the air under the lid that caps the lowest kilometre or two,
+            // and is gone within a couple of hundred metres above it, so that from above it lies as a band along the horizon,
+            // under the heaps that stand on its top. Thinning out over 800 m above, as it first did, it was thick still a
+            // kilometre over its top: from about the clouds' height a level line of sight was greyed by 85 to 98 %, a grey bar
+            // round the view with the clouds behind it (the owner, 2026-10-18).)
+            else { top = g + 1500f; soft = 150f; }
+            floor = g;
             // (the dust's colour, for the sunlight it throws forward: the ground's, which is what it is made of, paler and warmed; see
             // Daylight.DustColour. The light from all round is in that colour already.)
             if (dust > 0.01f) dustColour = Daylight.DustColour(Daylight.GroundNow);

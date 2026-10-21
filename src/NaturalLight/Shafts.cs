@@ -96,7 +96,7 @@ namespace NaturalLight
 
         static Camera Last()
         {
-            foreach (Camera cam in Camera.allCameras) if (cam != null && cam.name == "Camera 00" && cam.isActiveAndEnabled) return cam;
+            Camera near = Keystone.Names.CameraNamed("Camera 00"); if (near != null) return near;
             return null;
         }
 

@@ -43,6 +43,9 @@ namespace NaturalLight
             public Mesh[] Beams;            // each lamp's beam in the air: a strip from the lamp, turned to face the camera
             public Renderer[] BeamShows;
             public Vector3[] BeamEnds;      // where each beam ends, in its own lamp's space
+            public Vector3 FacedFrom = new Vector3(float.MaxValue, 0f, 0f);   // the camera when its cards were last turned, in the rig's own space
+            public Quaternion FacedTurn;
+            public float FacedOn = -1f;
             public Vector3[] Aims;          // which way each lamp points, in the rig's space
             public Renderer[] Fixtures;     // what glows in each searchlight's head (glass, reflector, lamp), lit when it is
             public Mesh[] LampMeshes;       // (each a mesh of its own, in the rig's frame)
@@ -195,7 +198,7 @@ namespace NaturalLight
             }
         }
 
-        static Material Glow()
+        internal static Material Glow()
         {
             if (glow != null) return glow;
             Shader shader = Shader.Find("KSP/Particles/Additive") ?? Shader.Find("Legacy Shaders/Particles/Additive") ?? Shader.Find("Particles/Additive");
@@ -220,7 +223,7 @@ namespace NaturalLight
         }
 
         /// <summary>A beam seen from the side: brightest along its middle and at the lamp, thinning out to nothing at its far end.</summary>
-        static Material Shaft()
+        internal static Material Shaft()
         {
             if (shaft != null) return shaft;
             Shader shader = Shader.Find("KSP/Particles/Additive") ?? Shader.Find("Legacy Shaders/Particles/Additive") ?? Shader.Find("Particles/Additive");
@@ -243,7 +246,7 @@ namespace NaturalLight
             return shaft;
         }
 
-        static Mesh Card()
+        internal static Mesh Card()
         {
             if (card != null) return card;
             card = new Mesh
@@ -1038,15 +1041,29 @@ namespace NaturalLight
         }
 
         /// <summary>Each lamp is a card turned to face whichever camera is about to draw it, and large enough to be seen as a point of light from afar.</summary>
+        int facedAt = -1;
+        Vector3 facedFrom;
+        Quaternion facedTurn;
+
         void Face(Camera cam)
         {
             if (cam == null || sites.Count == 0) return;
             string name = cam.name;
             if (name != "Camera 00" && name != "Camera 01") return;
             Transform eye = cam.transform;
+            // (the near camera and the far one stand at the same place, turned the same way: what is turned for the one is turned for
+            // the other)
+            if (Time.frameCount == facedAt && eye.position == facedFrom && eye.rotation == facedTurn) return;
+            facedAt = Time.frameCount; facedFrom = eye.position; facedTurn = eye.rotation;
             foreach (Site site in sites)
             {
                 if (site.Rig == null || site.On <= 0f) continue;
+                // (a site the camera has not moved against since its cards were last turned, in the rig's own space, is as it was)
+                Transform rig = site.Rig.transform;
+                Vector3 eyeHere = rig.InverseTransformPoint(eye.position);
+                Quaternion turnHere = Quaternion.Inverse(rig.rotation) * eye.rotation;
+                if ((eyeHere - site.FacedFrom).sqrMagnitude < 1e-4f && Quaternion.Dot(turnHere, site.FacedTurn) > 0.9999999f && site.FacedOn == site.On) continue;
+                site.FacedFrom = eyeHere; site.FacedTurn = turnHere; site.FacedOn = site.On;
                 for (int k = 0; k < Each; k++)
                 {
                     Transform head = site.Heads[k];
@@ -1353,9 +1370,10 @@ namespace NaturalLight
         static void EyeOn(Camera cam)
         {
             if (eyeAt == null || eyeOn == null || cam == null) return;
-            bool flight = cam.name == "Camera 00" || cam.name == "Camera 01";
+            string camName = Keystone.Names.Of(cam);
+            bool flight = camName == "Camera 00" || camName == "Camera 01";
             // (the sky's cameras turned the same way, where they are)
-            if (!flight && cam.name != "Camera ScaledSpace" && cam.name != "GalaxyCamera") return;
+            if (!flight && camName != "Camera ScaledSpace" && camName != "GalaxyCamera") return;
             eyeWas[cam] = new KeyValuePair<Vector3, Quaternion>(cam.transform.localPosition, cam.transform.localRotation);
             if (flight) cam.transform.position = eyeOn.TransformPoint(eyeAt.Value);
             cam.transform.rotation = eyeOn.rotation * eyeTurn;

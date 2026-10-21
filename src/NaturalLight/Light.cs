@@ -46,7 +46,7 @@ namespace NaturalLight
     [KSPAddon(KSPAddon.Startup.FlightAndKSC, false)]
     public sealed class Daylight : MonoBehaviour
     {
-        public const string Version = "0.11.0";
+        public const string Version = "0.12.0";
 
         static Mod mod;
         /// <summary>The mod's page in Keystone's window: for the parts of the mod that have something to say on it.</summary>
@@ -56,7 +56,7 @@ namespace NaturalLight
         static Choice through;
         static Toggle fine, inside, rays;
         static Slider thrown;
-        public static Toggle Engines, Floods, Filmed, Windows, Deep, Shafts, Smoke, Crew, Runway, Veil;
+        public static Toggle Engines, Floods, Filmed, Windows, Deep, Shafts, Smoke, Crew, Runway, Veil, LampBeams, RedLamps, NavLights;
 
         /// <summary>The light from all round, the sky's and the ground's and other worlds', taken together (as light): for the other parts of the mod.</summary>
         public static Color Around = Color.black;
@@ -121,6 +121,8 @@ namespace NaturalLight
         /// <summary>What the mod's own lamps may light: what the game's sun does (the scene the craft is in, and not the planets drawn from afar or the insides of cockpits, which share the same space).</summary>
         public static int Lit => Sun.Instance != null && Sun.Instance.sunLight != null ? Sun.Instance.sunLight.cullingMask : ~((1 << 5) | (1 << 9) | (1 << 10) | (1 << 16) | (1 << 20));
 
+        static void Faster(Mod mod) => mod.Faster(Shafts, "False");
+
         public static void Setup()
         {
             if (mod == null || Kit.Find("Natural Light") != mod)
@@ -132,11 +134,12 @@ namespace NaturalLight
                 dark = mod.Slider("dark", "Darkest", 0.045f, 0f, 0.25f, "", 3, "The least light there ever is, so that the night side is dark but not black. The game's own flat light is 0.06 in space and 0.24 in air, by night as by day: raise this towards that if nights are too dark to fly in.");
                 rays = mod.Toggle("rays", "Light found by rays", true, "Rays are cast from the craft in every direction, to find what is round it: a hangar wall, a crater's side, an overhang. The sky then lights the craft only from where it can be seen, and whatever the rays find lights it from there, in its own colour, as brightly as the sun and the sky are on it (a second ray, towards the sun, says whether it is in shadow: the craft's own shadow included). Near the ground only.");
                 thrown = mod.Slider("thrown", "Light thrown back", 1f, 0f, 2.5f, "", 2, "How strongly what the rays find lights the craft.");
-                inside = mod.Toggle("inside", "Inside the craft too", true, "The cockpit, and the crew's portraits, lit by a share of the light outside and by the cabin's own glow, instead of by the game's one flat grey: in a planet's shadow the crew sit in a dim cabin, as the craft they are in sits in the dark.");
+                inside = mod.Toggle("inside", "Inside the craft too", true, "The cockpit, and the crew's portraits, lit from its windows by whatever they look at (the sky, the planet below, a sunset), with the light the walls throw back, instead of by the game's one flat grey; the game's own sun in the cabin dimmed by the clouds and reddened at sunset as the sun outside is. In a planet's shadow the crew sit in a dim cabin, as the craft they are in sits in the dark.");
                 mod.Heading("The sun");
                 through = mod.Choice("through", "Sun through air", 0, new[] { "if nothing else does", "always", "never" }, "A low sun shines through far more air than a high one, and comes out dimmer and redder (or, through Duna's dust, bluer). Scatterer does this already where it is installed and set to: 'if nothing else does' leaves it to Scatterer then.");
                 Shafts = mod.Toggle("shafts", "Shafts of sunlight", true, "With the sun in view and something in front of it, a tower, a rocket, the edge of a cloud, its light comes round in shafts through the air. Only where there is air. (A shader of the mod's own, packed for the game's OpenGL on a Mac or Linux and built for Direct3D on Windows.)");
                 ShaftLight = mod.Slider("shaftlight", "How strong", 1f, 0f, 3f, "", 2, "How strongly the shafts show.");
+                try { Faster(mod); } catch (Exception) { }     // (what "every mod set for speed" sets here; not with a Keystone older than 0.9.0)
                 Veil = mod.Toggle("veil", "Rain, snow, fog and dust in the air", true, "With a weather mod installed (Natural Weather), what is in the air veils the distance as it does: the far side of the pad greys out in rain, the hills whiten in snow, fog swallows everything past a hundred metres, a dust storm on Duna is an ochre murk. As far as the weather says one can see, lit as the sky and the ground light it, and brighter towards the sun where the sun is out. (A shader of the mod's own, packed for the game's OpenGL on a Mac or Linux and built for Direct3D on Windows.)");
                 golden = mod.Slider("golden", "Low sun", 0.7f, 0f, 1f, "", 2, "A sinking sun is dimmed by the air, and the eye (like any camera) opens up to keep pace: so the last hour of sunlight is still strong, in its evening colour, and throws long clear shadows, instead of fading into grey. 0: no keeping pace, the sun simply dims.");
                 shadows = mod.Slider("shadows", "Depth of shadows", 1f, 0f, 1f, "", 2, "The game lets a quarter of the sunlight through every shadow, to keep its flat grey light from looking dead. With the sky and the ground lighting what is in shadow that is not needed: at 1 no sunlight comes through, and shadows are as dark (and, under a blue sky, as blue) as they are. 0: as the game has them.");
@@ -148,10 +151,14 @@ namespace NaturalLight
                 Engines = mod.Toggle("engines", "Engine light", true, "A running engine lights what is round it: the craft, the pad, the ground it is landing on.");
                 EngineLight = mod.Slider("enginelight", "How bright", 1f, 0.2f, 3f, "", 2, "How strongly engines light their surroundings.");
                 Smoke = mod.Toggle("smoke", "Smoke takes the light", true, "The game draws its smoke as bright at midnight as at noon. With this, an engine's trail and the cloud at a launch are as bright as the light on them: gold at sunrise, dark at night but for the glow of the flame and the launch site's floodlights. By day as the game has it.");
+                mod.Heading("Lamps");
+                LampBeams = mod.Toggle("lampbeams", "Lamps' beams in fog and rain", true, "A craft's spotlights show their beams where the air is thick with fog, rain, snow or dust, as a car's headlights do in fog; by night most, by day hardly at all, and not in clean air.");
+                NavLights = mod.Toggle("navlights", "Aeroplanes' lights", true, "A winged craft shows what every aeroplane does: red and green lights at its wingtips and a white one at its tail by night, a flashing red beacon on top, and white strobes flashing at the wingtips whenever it rolls or flies, which light the wing round them.");
                 mod.Heading("Launch sites");
                 Floods = mod.Toggle("floods", "Floodlights by night", true, "Launch pads and runways are lit by night, as real ones are: a ring of floodlights on the ground round where a craft is rolled out, which come on as the sun goes down.");
                 FloodLight = mod.Slider("floodlight", "How bright", 1f, 0.2f, 2.5f, "", 2, "How strongly the floodlights light the craft and the ground.");
                 Beams = mod.Slider("beams", "Beams in the air", 1f, 0f, 3f, "", 2, "The floodlights' beams seen in the night air, slanting up over the site. 0: none.");
+                RedLamps = mod.Toggle("redlamps", "Red lamps on tall buildings", true, "By night the space centre's tall buildings carry red lamps at their tops, as anything tall enough to be in an aircraft's way does: steady at the corners of a wide roof, flashing on the tallest.");
                 Runway = mod.Toggle("runway", "Runway lamps light the ground", true, "The rows of lamps along the runway, and its big lamps at the corners, throw their light on the concrete and the grass round each one, and on whatever stands or rolls past them. They come on with the game's own lamps at dusk.");
                 RunwayLight = mod.Slider("runwaylight", "How bright", 1f, 0.2f, 3f, "", 2, "How strongly the runway's lamps light the ground round them.");
                 Windows = mod.Toggle("windows", "Light from windows", true, "The lit windows of the space centre's buildings throw their light on the ground in front of them: as wide as the windows, further out the higher they are, brighter the more of the wall is glass. Where the windows are is found on the buildings themselves.");
@@ -194,6 +201,7 @@ namespace NaturalLight
             running = this;
             mod.Panel = Readout;
             Camera.onPreCull += Before;
+            Camera.onPreRender += Drawing;
 #if DEV
             Camera.onPreRender += SeenBefore; Camera.onPostRender += SeenAfter;
 #endif
@@ -201,15 +209,167 @@ namespace NaturalLight
 
 #if DEV
         static readonly Dictionary<string, string> seenAt = new Dictionary<string, string>();
-        static void SeenBefore(Camera cam) { if (cam != null && Sun.Instance != null && Sun.Instance.sunLight != null) seenAt[cam.name + " before drawing"] = Sun.Instance.sunLight.color.ToString() + " x " + Sun.Instance.sunLight.intensity.ToString("F2"); }
-        static void SeenAfter(Camera cam) { if (cam != null && Sun.Instance != null && Sun.Instance.sunLight != null) seenAt[cam.name + " after drawing"] = Sun.Instance.sunLight.color.ToString() + " x " + Sun.Instance.sunLight.intensity.ToString("F2"); }
+        static bool watching;
+        static void SeenBefore(Camera cam)
+        {
+            if (!watching) return;
+            if (cam != null && Sun.Instance != null && Sun.Instance.sunLight != null) seenAt[cam.name + " before drawing"] = Sun.Instance.sunLight.color.ToString() + " x " + Sun.Instance.sunLight.intensity.ToString("F2");
+            if (cam != null && Inside(cam))
+                foreach (IVASun s in FindObjectsOfType<IVASun>())
+                {
+                    Light l = s.GetComponent<Light>();
+                    if (l != null) seenAt[cam.name + "'s cabin sun before drawing"] = l.color.ToString() + " x " + l.intensity.ToString("F3") + ", ambient " + RenderSettings.ambientMode;
+                }
+        }
+        static void SeenAfter(Camera cam) { if (watching && cam != null && Sun.Instance != null && Sun.Instance.sunLight != null) seenAt[cam.name + " after drawing"] = Sun.Instance.sunLight.color.ToString() + " x " + Sun.Instance.sunLight.intensity.ToString("F2"); }
         /// <summary>(For the development build: the sun's colour as each camera finds it, before and after it draws.)</summary>
         public static string SunSeen()
         {
+            // (the cameras are watched only once this has been asked for: the watching made garbage and cost two thirds of a millisecond)
+            watching = true;
             var o = new System.Text.StringBuilder("set to " + (running != null ? running.sunSet.ToString() : "?") + "; ");
             foreach (KeyValuePair<string, string> kv in seenAt) o.Append(kv.Key + ": " + kv.Value + "; ");
             return o.ToString();
         }
+
+        /// <summary>
+        /// (For the development build: the inside of the cockpit. "in" or "out" goes in or out, as the game's C key does; "look pitch,turn"
+        /// turns the kerbal's head, in degrees; anything else says how the cabin is lit: the game's sun in it, its lamps, its cameras and the
+        /// light all round it.)
+        /// </summary>
+        public static string Cabin(string arg)
+        {
+            CameraManager cameras = CameraManager.Instance;
+            string a = (arg ?? "").Trim();
+            var culture = System.Globalization.CultureInfo.InvariantCulture;
+            if (a == "in") return cameras != null && cameras.SetCameraIVA() ? "in the cockpit" : "the game would not go into the cockpit";
+            if (a == "out") { if (cameras != null) cameras.SetCameraFlight(); return "outside"; }
+            if (a.StartsWith("look"))
+            {
+                InternalCamera inner = InternalCamera.Instance;
+                if (inner == null) return "no cockpit camera";
+                string[] w = a.Substring(4).Trim().Split(',');
+                float pitch = float.Parse(w[0], culture), turn = w.Length > 1 ? float.Parse(w[1], culture) : 0f;
+                Reach.Field(typeof(InternalCamera), "currentPitch")?.SetValue(inner, pitch);
+                Reach.Field(typeof(InternalCamera), "currentRot")?.SetValue(inner, turn);
+                return "looking " + pitch + ", " + turn;
+            }
+            if (a == "old") { oldCabin = !oldCabin; if (oldCabin && running != null) running.CabinSunBack(); Cockpits.Lamps(!oldCabin); return oldCabin ? "the cabin lit as before 0.12 (a share of the light outside, the game's own sun)" : "the cabin lit from its windows"; }
+            if (a == "forget") { Cockpits.Forget(); return "the cockpits' openings to be looked for again"; }
+            if (a == "eye") return FilmLook.Report + " | metered: " + FilmLook.MeteredName + " | " + FilmLook.Peak();
+            if (a.StartsWith("bear ")) { FilmLook.CockpitBears = float.Parse(a.Substring(5).Trim(), culture); return "in a cockpit the brightest part may come to " + FilmLook.CockpitBears; }
+            if (a.StartsWith("daylamps ")) { dayLamps = float.Parse(a.Substring(9).Trim(), culture); return "the cabin's lamps by day at " + dayLamps + (dayLamps < 0f ? " (as the mod has them)" : ""); }
+            if (a.StartsWith("lamps ")) { Cockpits.LampGain = float.Parse(a.Substring(6).Trim(), culture); return "the windows' lamps at " + Cockpits.LampGain + " times; pixel lights " + QualitySettings.pixelLightCount; }
+            if (a == "map") return Cockpits.Map(InternalCamera.Instance != null ? InternalCamera.Instance.GetComponent<Camera>() : null);
+            if (a.StartsWith("aim "))
+            {
+                // ("aim sun 25": the craft turned so that its cockpit's windows look 25 degrees off the sun; "aim planet 0": straight down at it)
+                string[] w = a.Substring(4).Trim().Split(' ');
+                Vessel v = FlightGlobals.ActiveVessel;
+                Part seat = v != null ? v.GetReferenceTransformPart() : null;
+                InternalModel im = seat != null && seat.internalModel != null ? seat.internalModel : null;
+                if (im == null && v != null) foreach (Part pt in v.parts) if (pt.internalModel != null) { im = pt.internalModel; break; }
+                Vector3 window = Cockpits.WindowWay(im);
+                if (im == null || window == Vector3.zero) return "no cockpit with windows";
+                Vector3 inVessel = im.transform.rotation * window;                       // (the cockpits' space is the craft's own frame)
+                Vector3 target = w[0] == "planet" ? (Vector3)(v.mainBody.position - v.CoM).normalized : (Vector3)(Planetarium.fetch.Sun.position - v.CoM).normalized;
+                float off = w.Length > 1 ? float.Parse(w[1], culture) : 0f;
+                Vector3 side = Vector3.Cross(target, Vector3.Cross(target, (Vector3)(v.mainBody.position - v.CoM)).normalized);
+                if (side.sqrMagnitude < 1e-4f) side = Vector3.Cross(target, Vector3.up);
+                target = Quaternion.AngleAxis(off, side.normalized) * target;
+                Quaternion now = v.transform.rotation;
+                Quaternion turned = Quaternion.FromToRotation(now * inVessel, target) * now;
+                v.SetRotation(turned);
+                return "turned: the windows look " + off + " degrees off " + w[0] + " (window way " + window.ToString("F2") + ")";
+            }
+            if (a == "sh")
+            {
+                // (whether so many patches of sky, each lighting as light × solid angle / π, add up all round to what an even light of the
+                // same brightness gives: the reckoning the windows' light rests on)
+                const int N = 2048;
+                var all = new SphericalHarmonicsL2();
+                float golden = Mathf.PI * (3f - Mathf.Sqrt(5f));
+                for (int n = 0; n < N; n++)
+                {
+                    float z = 1f - (2f * n + 1f) / N, r = Mathf.Sqrt(1f - z * z), t = golden * n;
+                    all.AddDirectionalLight(new Vector3(r * Mathf.Cos(t), r * Mathf.Sin(t), z), Color.white, 4f * Mathf.PI / N / Mathf.PI);
+                }
+                var even = new SphericalHarmonicsL2();
+                even.AddAmbientLight(Color.white);
+                var half = new SphericalHarmonicsL2();
+                for (int n = 0; n < N; n++)
+                {
+                    float z = 1f - (2f * n + 1f) / N, r = Mathf.Sqrt(1f - z * z), t = golden * n;
+                    if (z > 0f) half.AddDirectionalLight(new Vector3(r * Mathf.Cos(t), r * Mathf.Sin(t), z), Color.white, 4f * Mathf.PI / N / Mathf.PI);
+                }
+                var at = new[] { Vector3.forward, Vector3.back, Vector3.right };
+                var got = new Color[3];
+                var o2 = new System.Text.StringBuilder();
+                all.Evaluate(at, got); o2.Append("patches all round: " + got[0].r.ToString("F3") + " " + got[1].r.ToString("F3") + " " + got[2].r.ToString("F3"));
+                even.Evaluate(at, got); o2.Append("; even light 1: " + got[0].r.ToString("F3") + " " + got[1].r.ToString("F3") + " " + got[2].r.ToString("F3"));
+                half.Evaluate(at, got); o2.Append("; patches over the half toward +z, facing +z, -z, sideways: " + got[0].r.ToString("F3") + " " + got[1].r.ToString("F3") + " " + got[2].r.ToString("F3"));
+                return o2.ToString();
+            }
+            if (a.StartsWith("sun "))
+            {
+                // (the game's sun in the cabin set to so much of the sun outside: 0.9 is the game's own)
+                float x = float.Parse(a.Substring(4).Trim(), culture);
+                foreach (IVASun s in FindObjectsOfType<IVASun>()) s.intensityScalar = x;
+                return "the cabin sun at " + x + " of the sun";
+            }
+            if (a.StartsWith("shadows "))
+            {
+                bool off = a.EndsWith("off");
+                foreach (IVASun s in FindObjectsOfType<IVASun>()) { Light l = s.GetComponent<Light>(); if (l != null) l.shadows = off ? LightShadows.None : LightShadows.Soft; }
+                return "the cabin sun's shadows " + (off ? "off" : "on");
+            }
+            if (a == "parts")
+            {
+                // (every renderer of the active craft's insides: where it is in the cockpit's own frame, its shader, its shadows)
+                var p = new System.Text.StringBuilder();
+                Vessel v = FlightGlobals.ActiveVessel;
+                if (v == null) return "no craft";
+                foreach (Part part in v.parts)
+                {
+                    if (part.internalModel == null) continue;
+                    Transform root = part.internalModel.transform;
+                    p.Append("[" + part.partInfo.name + " / " + part.internalModel.internalName + " at " + root.position + "] ");
+                    foreach (Renderer r in part.internalModel.GetComponentsInChildren<Renderer>(true))
+                    {
+                        Material m = r.sharedMaterial;
+                        Vector3 c = root.InverseTransformPoint(r.bounds.center);
+                        p.Append(r.name + " (" + (m != null ? m.name + " " + (m.shader != null ? m.shader.name : "?") + " q" + m.renderQueue : "no material") + ", at " + c.ToString("F2") + " size " + r.bounds.size.ToString("F2") + ", layer " + r.gameObject.layer + ", casts " + r.shadowCastingMode + ", takes " + r.receiveShadows + (r.enabled && r.gameObject.activeInHierarchy ? "" : ", hidden") + "); ");
+                    }
+                }
+                foreach (IVASun s in FindObjectsOfType<IVASun>()) p.Append("the cabin sun shines toward " + s.transform.forward.ToString("F3") + " (world), ");
+                InternalModel im = v.GetReferenceTransformPart() != null ? v.GetReferenceTransformPart().internalModel : null;
+                if (im != null && FindObjectOfType<IVASun>() != null) p.Append("toward " + im.transform.InverseTransformDirection(FindObjectOfType<IVASun>().transform.forward).ToString("F3") + " in the cockpit's frame");
+                return p.ToString();
+            }
+            var o = new System.Text.StringBuilder("mode " + (cameras != null ? cameras.currentCameraMode.ToString() : "?"));
+            Light sl = Sun.Instance != null ? Sun.Instance.sunLight : null;
+            if (sl != null) o.Append("; the sun " + sl.intensity.ToString("F3") + " " + sl.color + " shadows " + sl.shadows);
+            foreach (IVASun s in FindObjectsOfType<IVASun>())
+            {
+                Light l = s.GetComponent<Light>();
+                o.Append("; cabin sun " + s.name + " scalar " + s.intensityScalar + (l != null ? " " + l.intensity.ToString("F3") + " " + l.color + " shadows " + l.shadows + " " + l.shadowStrength + " bias " + l.shadowBias + " mask " + l.cullingMask + (l.enabled ? "" : " (off)") + " " + l.renderMode : " (no light)"));
+            }
+            foreach (Light l in FindObjectsOfType<Light>())
+                if (l.type != LightType.Directional && (l.cullingMask & ((1 << 16) | (1 << 20))) != 0 && (l.cullingMask & (1 << 15)) == 0)
+                    o.Append("; lamp " + l.name + " " + l.type + " " + l.intensity.ToString("F3") + " range " + l.range.ToString("F1") + " " + l.color + " " + l.renderMode + " shadows " + l.shadows);
+            foreach (Camera c in Camera.allCameras) o.Append("; camera " + c.name + " depth " + c.depth + " mask " + c.cullingMask + (Inside(c) ? " (inside)" : "") + (c.allowHDR ? " hdr" : ""));
+            if (running != null && running.haveInside)
+            {
+                running.insideProbe.Evaluate(six, sixLights);
+                o.Append("; all round inside");
+                for (int k = 0; k < 6; k++) o.Append(" " + six[k] + " " + sixLights[k]);
+            }
+            o.Append("; cockpits: " + Cockpits.Said());
+            o.Append("; " + SunSeen());
+            return o.ToString();
+        }
+        static bool oldCabin;
+        static float dayLamps = -1f;
 #endif
 
         void OnDestroy()
@@ -222,8 +382,11 @@ namespace NaturalLight
             }
             tinting = false; itsShadows = float.NaN;
             CabinBack();
+            Cockpits.Lamps(false);
+            Shader.SetGlobalVector(idWorld, Vector4.zero);
             if (haveSplit) { QualitySettings.shadowCascade4Split = itsSplit; haveSplit = false; }
             Camera.onPreCull -= Before;
+            Camera.onPreRender -= Drawing;
 #if DEV
             Camera.onPreRender -= SeenBefore; Camera.onPostRender -= SeenAfter;
 #endif
@@ -416,6 +579,8 @@ namespace NaturalLight
             {
                 Near = false;
                 if (cabinWas.Count > 0) CabinBack();
+                Cockpits.Lamps(false);
+                Shader.SetGlobalVector(idWorld, Vector4.zero);
                 SunThrough(Color.white, false);
                 return;
             }
@@ -428,6 +593,8 @@ namespace NaturalLight
             double radius = body.Radius;
             float sunUp = Vector3.Dot(up, toSun);                           // the sine of how high the sun stands
             SunUp = sunUp;
+            // (and how much of the sun another world hides: Eclipse)
+            Eclipse.Look(place, body, sun);
             Air = body.atmosphere && height < body.atmosphereDepth ? Mathf.Clamp01(1f - Mathf.Exp(-3f * (float)(body.GetPressure(height) / 101.325))) : 0f;
             // How much of what is below is planet: all of it on the ground, less with height (as a flat thing facing the planet sees it).
             float fills = (float)((radius / (radius + height)) * (radius / (radius + height)));
@@ -522,6 +689,8 @@ namespace NaturalLight
                 else
 #endif
                 skyLight = UnderCloud(skyLight, sunUp, cloudSun, cloudSky);
+                // (the sky is the sun's light, scattered: with the sun eclipsed it goes too, all but a little from beyond the shadow)
+                skyLight *= Mathf.Max(Eclipse.Left, 0.0003f);
                 // A sky is all round, not only overhead: what stands upright is lit by the half of it in front, which is three fifths
                 // of what the ground gets (the sky is brighter towards the horizon than overhead). So the light is given as coming
                 // partly from above and partly from all round the horizon, in the shares that make it so, and little of it reaches
@@ -542,17 +711,17 @@ namespace NaturalLight
                     float most = Mathf.Max(far.r, Mathf.Max(far.g, far.b));
                     if (most > 1e-4f) far /= most;
                     float low = Mathf.Exp(-(degrees - 1f) * (degrees - 1f) / 110f) * Mathf.InverseLerp(-14f, -5f, degrees);    // most with the sun at the horizon, gone by fourteen degrees under
-                    glow = 0.034f * sky * thick * low * (1f - cloudGrey);
+                    glow = 0.034f * sky * thick * low * (1f - cloudGrey) * Eclipse.Left;
                     made.AddDirectionalLight(side, far.linear, glow);
                     // (and by day the sky round the sun is the brightest part of it, and nearer white)
-                    made.AddDirectionalLight(toSun, Color.Lerp(skyColour, Color.white, 0.6f).linear, 0.012f * sky * thick * day * cloudSun);
+                    made.AddDirectionalLight(toSun, Color.Lerp(skyColour, Color.white, 0.6f).linear, 0.012f * sky * thick * day * cloudSun * Eclipse.Left);
                 }
             }
             SunThrough(passes, true);
             if (!body.atmosphere || height >= body.atmosphereDepth) Clouded = 0f;
 
             // ---- every other world in the sky: from its own side, in its own colour, by how much of it is lit and how large it stands
-            string shining = Worlds(ref made, body, sun, place, up, sunUp, height, skyLight);
+            Worlds(ref made, body, sun, place, up, sunUp, height, skyLight);
 
             // ---- the ground, or the planet below: from underneath, in its own colour, as brightly as the sun is on it
             // (close to, it is the ground round about, lit as the sun stands here; from high up, the lit part of the planet that can be seen)
@@ -586,10 +755,25 @@ namespace NaturalLight
             Color below = (groundColour * sunTint).linear + Color.Lerp(skyColour, Color.white, 0.5f).linear * (0.16f * airBelow);
             // (less of it, by as much of what is below as the rays have found for themselves)
             float worked = 1f - foundBelow;
-            made.AddDirectionalLight(-up, below, groundLight * worked);
+            Color fromBelow = below * (groundLight * worked);
+            // (Since 0.12.0: above cloud. A deck of cloud under the craft is not the ground: its tops are in the sun as it is up
+            // here, nothing between, and throw back some three quarters of it, white. Flying over an overcast, a craft's underside is
+            // lit nearly as brightly as its top, as from an airliner's window the wing over a deck is; taken as the ground below
+            // the deck, it had the ground's green twentieth. As much of it as the weather has cloud below the craft.)
+            float deck = DeckBelow * (cloudsBroken ? 0f : 1f);
+#if DEV
+            if (NoDeck) deck = 0f;
+#endif
+            if (deck > 0.01f && body.atmosphere)
+            {
+                float deckLit = Mathf.Clamp01(sunUp * 1.15f + 0.04f);
+                Color tops = Color.Lerp(Color.white, reachingClear, 0.7f).linear * (0.75f * deckLit * ground * fills * (1f + 0.7f * FilmLook.Working));
+                fromBelow = Color.Lerp(fromBelow, tops * worked, deck);
+            }
+            made.AddDirectionalLight(-up, fromBelow, 1f);
             // (and what stands upright sees half of the ground: that much of its light, from all round and a little below level)
-            Band(ref made, up, -0.35f, below, groundLight * 0.3f * fills * worked);
-            made.AddAmbientLight(below * (groundLight * 0.05f * worked));
+            Band(ref made, up, -0.35f, fromBelow, 0.3f * fills);
+            made.AddAmbientLight(fromBelow * 0.05f);
             // ---- and what the rays found: each surface from where it is, as the sun and the sky are on it
             // (the sun's light as it falls on what faces it: half, as for the worked-out ground, of what it is)
             if (close > 0f)
@@ -601,7 +785,7 @@ namespace NaturalLight
             Color together = Color.black;
             foreach (Color one in sixFound) together += one;
             Around = new Color(Mathf.Max(0f, together.r / 6f), Mathf.Max(0f, together.g / 6f), Mathf.Max(0f, together.b / 6f));
-            if (inside != null && inside) InsideLight(); else { haveInside = false; if (cabinWas.Count > 0) CabinBack(); }
+            if (inside != null && inside) InsideLight(); else { haveInside = false; if (cabinWas.Count > 0) CabinBack(); Cockpits.Lamps(false); }
 
             if (Time.realtimeSinceStartup > nextReport)
             {
@@ -613,7 +797,7 @@ namespace NaturalLight
                 report = "Over " + body.bodyName + ", the sun " + Mathf.RoundToInt(Mathf.Asin(Mathf.Clamp(sunUp, -1f, 1f)) * Mathf.Rad2Deg) + "° up.  Sky " + fromSky.ToString("F2")
                     + (skyLight > 0.0005f ? " (" + Hex(skyColour) + ")" : "") + " from above, ground " + fromGround.ToString("F2") + " (" + Hex(groundColour) + ") from below, least " + darkest.ToString("F3") + "."
                     + (glow > 0.0005f ? "  The sky's warm side " + Mathf.LinearToGammaSpace(glow * 1.06f).ToString("F2") + "." : "")
-                    + (sunUp > -0.1f ? "  Sunlight " + Hex(reaching) + (gain > 1.02f ? ", the eye " + gain.ToString("F2") + " times open" : "") + "." : "") + shining;
+                    + (sunUp > -0.1f ? "  Sunlight " + Hex(reaching) + (gain > 1.02f ? ", the eye " + gain.ToString("F2") + " times open" : "") + "." : "") + Shining();
             }
         }
 
@@ -626,6 +810,15 @@ namespace NaturalLight
         float cloudSunNow = 1f;
         static bool cloudsBroken;
         static bool sunDimmedElsewhere;     // the weather mod dims the sun itself just now (its own clouds drawn): not to be dimmed twice
+        /// <summary>(Since 0.12.0.) How much of what is below the craft is the tops of cloud, as the weather says (0 to 1).</summary>
+        public static float DeckBelow;
+#if DEV
+        /// <summary>(Development build: the cloud tops below left out, to compare.)</summary>
+        public static bool NoDeck;
+        /// <summary>(Development build: an error logged from this mod's own code, to see Keystone put it on the mod's row.)</summary>
+        public static string Oops() { Debug.LogError("[Natural Light] a test error, from the development build (Daylight.Oops)"); return "logged"; }
+        public static string Deck(string v) { NoDeck = v == "off"; return "cloud tops below " + (NoDeck ? "left out" : "in") + "; " + (100f * DeckBelow).ToString("F0") + "% of what is below is cloud"; }
+#endif
 
         /// <summary>
         /// The clouds between the craft and the sun and over it, from Keystone's Weather where a weather mod answers (since
@@ -647,8 +840,16 @@ namespace NaturalLight
             double ut = Planetarium.GetUniversalTime();
             WeatherShade shade = Keystone.Weather.Shade(body, place, (Vector3d)toSun, ut);
             sun = Mathf.Clamp01(shade.Sun); sky = Mathf.Clamp(shade.Sky, 0f, 4f); grey = Mathf.Clamp01(shade.Grey);
-            dust = Mathf.Clamp01(Keystone.Weather.At(body, place).Dust);
+            WeatherHere here = Keystone.Weather.At(body, place);
+            dust = Mathf.Clamp01(here.Dust);
             sunDimmedElsewhere = shade.SunDimmed;
+            // (and how much of what is below is the tops of cloud: the layers whose tops are under the craft, one over another)
+            double alt = body.GetAltitude(place);
+            float clear = 1f;
+            if (here.Low.Cover > 0.02f && here.Low.Top < alt) clear *= 1f - Mathf.Clamp01(here.Low.Cover);
+            if (here.Middle.Cover > 0.02f && here.Middle.Top < alt) clear *= 1f - Mathf.Clamp01(here.Middle.Cover);
+            if (here.High.Cover > 0.02f && here.High.Top < alt) clear *= 1f - Mathf.Clamp01(here.High.Cover);
+            DeckBelow = 1f - clear;
         }
 
         /// <summary>
@@ -767,16 +968,19 @@ namespace NaturalLight
                 gain = Mathf.Lerp(gain, wanted, 1f - Mathf.Exp(-4f * Mathf.Min(Time.unscaledDeltaTime, 0.1f)));
                 // (and with a film curve the sun itself can be as much brighter than the shade as it is)
                 // (and what the clouds leave of it: after the eye has been set, which keeps pace with the air and not with clouds)
-                sunSet = own * (gain * (1f + 0.22f * FilmLook.Working)); sunSet.a = 1f;
+                sunSet = own * (gain * (1f + 0.22f * FilmLook.Working));
+                // (another world before the sun takes its share after the eye has been set: the eye does not open for an eclipse at once,
+                // and in the shadow of a world with air what comes is its rim's red sunset light: see Eclipse)
+                sunSet = sunSet * Eclipse.Left + Eclipse.Ring * (gain * (1f + 0.22f * FilmLook.Working)); sunSet.a = 1f;
 #if DEV
                 if (oldClouds) { sunSet *= cloudSunNow; sunSet.a = 1f; }
 #endif
                 // (and how brightly it shows on white that faces it, before the clouds: for the light under cloud)
-                Color clear = left * (gain * (1f + 0.22f * FilmLook.Working));
+                Color clear = left * (gain * (1f + 0.22f * FilmLook.Working) * Eclipse.Left);
                 sunClear = sunLight.intensity * (0.2126f * clear.r + 0.7152f * clear.g + 0.0722f * clear.b);
                 sunLight.color = sunSet; sunSetAt = Time.frameCount; tinting = true;
-                reaching = left * (gain * (1f + 0.22f * FilmLook.Working) * cloudSunNow); reaching.a = 1f;
-                reachingClear = left * (gain * (1f + 0.22f * FilmLook.Working)); reachingClear.a = 1f;
+                reaching = left * (gain * (1f + 0.22f * FilmLook.Working) * cloudSunNow * Eclipse.Left); reaching.a = 1f;
+                reachingClear = left * (gain * (1f + 0.22f * FilmLook.Working) * Eclipse.Left); reachingClear.a = 1f;
 #if DEV
                 if (oldClouds) reachingClear = reaching;
 #endif
@@ -867,10 +1071,15 @@ namespace NaturalLight
         /// which shows as nothing by day and is all there is by night; so in the dark its light is turned up, as the eye
         /// turns itself up (see "Night eyes"). Jool over Laythe needs no such help.
         /// </summary>
-        string Worlds(ref SphericalHarmonicsL2 made, CelestialBody home, CelestialBody sun, Vector3d place, Vector3 up, float sunUp, double height, float skyLight)
+        // (the brightest other world in the sky, kept as numbers: its words are made only when the report is, twice a second;
+        // made every frame, as until 2026-10-18, they were garbage the collector came round for)
+        string worldName; float worldLight, worldHigh, worldBearing; Color worldFace;
+        string Shining() => worldName == null ? "" : "  " + worldName + "'s light " + Mathf.LinearToGammaSpace(worldLight * 1.06f).ToString("F2") + " (" + Hex(worldFace) + "), " + Mathf.RoundToInt(worldHigh) + "° up, bearing " + Mathf.RoundToInt(worldBearing) + "°.";
+
+        void Worlds(ref SphericalHarmonicsL2 made, CelestialBody home, CelestialBody sun, Vector3d place, Vector3 up, float sunUp, double height, float skyLight)
         {
             float much = worlds;
-            if (much <= 0f || FlightGlobals.Bodies == null) return "";
+            if (much <= 0f || FlightGlobals.Bodies == null) { Shader.SetGlobalVector(idWorld, Vector4.zero); worldName = null; return; }
             // Whether the sun itself reaches the craft (it is above the edge of the world the craft is at, seen from this height).
             double dip = Math.Sqrt(Math.Max(0.0, 1.0 - Math.Pow(home.Radius / (home.Radius + height), 2.0)));
             bool sunlit = sunUp > -dip;
@@ -881,8 +1090,10 @@ namespace NaturalLight
             // picture, and knows when there is something bright in view that it must stay shut for)
             if (Eye != null) open = Mathf.Lerp(open, 1f + (open - 1f) * 0.22f, FilmLook.Working * Mathf.Clamp01((float)Eye));
             double toSunHere = (sun.position - place).magnitude;
-            string said = "";
+            worldName = null;
             float best = 0f;
+            Vector3 bestWay = Vector3.zero;
+            Color bestLight = Color.black;
             foreach (CelestialBody other in FlightGlobals.Bodies)
             {
                 if (other == null || other == home || other == sun || other.isStar) continue;
@@ -915,10 +1126,24 @@ namespace NaturalLight
                 if (light < 2e-5f) continue;
                 made.AddDirectionalLight(towards, face, light);
                 made.AddAmbientLight(face * (light * 0.1f));
-                if (light > best) { best = light; said = "  " + other.bodyName + "'s light " + Mathf.LinearToGammaSpace(light * 1.06f).ToString("F2") + " (" + Hex(face.gamma) + ")."; }
+                if (light > best)
+                {
+                    best = light; bestWay = towards; bestLight = face * light;
+                    // (and where it stands: how high, and its bearing round from north)
+                    Vector3 north = Vector3.ProjectOnPlane((Vector3)home.transform.up, up).normalized, east = Vector3.Cross(up, north);
+                    float high = Mathf.Asin(Mathf.Clamp(Vector3.Dot(towards, up), -1f, 1f)) * Mathf.Rad2Deg;
+                    float bearing = Mathf.Repeat(Mathf.Atan2(Vector3.Dot(towards, east), Vector3.Dot(towards, north)) * Mathf.Rad2Deg, 360f);
+                    worldName = other.bodyName; worldLight = light; worldFace = face.gamma; worldHigh = high; worldBearing = bearing;
+                }
             }
-            return said;
+            // (The brightest of them handed to every shader, as the veil is: towards it, in the scene; and its light as it lights what
+            // faces it, as light, turned up for the eye as it is here, with how dark it is. The sea takes it for the Mun's path on the
+            // water at night (Natural Ocean). Nought when there is none.)
+            Shader.SetGlobalVector(idWorld, new Vector4(bestWay.x, bestWay.y, bestWay.z, best > 0f ? 1f : 0f));
+            Shader.SetGlobalVector(idWorldLight, new Vector4(bestLight.r, bestLight.g, bestLight.b, darkness));
         }
+
+        static readonly int idWorld = Shader.PropertyToID("_NaturalLightWorld"), idWorldLight = Shader.PropertyToID("_NaturalLightWorldLight");
 
         // ---------------------------------------------------------------- giving it to the cameras it is for
 
@@ -960,17 +1185,31 @@ namespace NaturalLight
         /// </summary>
         void InsideLight()
         {
+            Cockpits.Look();
             probe.Evaluate(six, sixLights);
             Color outside = Color.black;
             foreach (Color c in sixLights) outside += c / 6f;
             var made = new SphericalHarmonicsL2();
-            made.AddAmbientLight(outside * 0.6f + new Color(0.115f, 0.105f, 0.095f).linear);
+            made.AddAmbientLight(outside * 0.6f + CabinGlow);
             insideProbe = made; haveInside = true;
-            // The cabin's own lamps: a crew flying by night turn theirs down, to see out. By how bright it is outside: all the
-            // way up by day, down to four tenths in the dark (and the film's eye, where there is one, makes up for nothing in
-            // here: the portraits are drawn apart from the picture it works on).
+            // The cabin's own lamps. The game's are as strong as sunshine on what they light, by day and by night alike: a cabin lit
+            // by them is lit evenly and as brightly as the day outside, whatever its windows let in. Electric lamps are as strong by
+            // day as by night; beside daylight they are faint, and in the dark they are what lights the cabin. So in the cockpit's
+            // own view, where the film's eye follows the view, they are at four tenths always (as the crew had them by night, turned
+            // down to see out), the light that comes in at the windows does the rest by day, and the eye opens for a dim cabin as a
+            // camera inside one does, its windows going pale. Without the eye (the camera's eye at 0: one exposure always, set for
+            // outside) nothing would make up for a dim cabin: there, as for the crew's portraits, which are drawn apart from the
+            // picture the eye works on, the lamps are all the way up by day and at four tenths in the dark, by how bright it is
+            // outside, as before. (Between the two as far as the eye is let follow the view.)
             float seen = 0.2126f * outside.r + 0.7152f * outside.g + 0.0722f * outside.b;
-            CabinLamps(Mathf.Lerp(0.4f, 1f, Mathf.Clamp01(seen / 0.02f)));
+            float portraits = Mathf.Lerp(0.4f, 1f, Mathf.Clamp01(seen / 0.02f));
+            float follows = Filmed != null && Filmed && Eye != null ? Mathf.Clamp01((float)Eye) : 0f;
+            float cockpit = Mathf.Lerp(portraits, 0.4f, follows);
+#if DEV
+            if (oldCabin) cockpit = portraits;
+            if (dayLamps >= 0f) cockpit = Mathf.Lerp(0.4f, dayLamps, Mathf.Clamp01(seen / 0.02f));
+#endif
+            CabinLamps(portraits, cockpit);
         }
 
         readonly Dictionary<Light, float> cabinWas = new Dictionary<Light, float>();
@@ -979,9 +1218,10 @@ namespace NaturalLight
         float cabinLooked = -10f, cabinLevel = 1f;
 
         /// <summary>The lamps inside cockpits, turned to so much of what they are. (Looked for every two seconds: a cockpit's insides come and go with the craft.)</summary>
-        void CabinLamps(float level)
+        void CabinLamps(float level, float cockpit)
         {
             cabinLevel = Mathf.MoveTowards(cabinLevel, level, 0.5f * Mathf.Min(Time.unscaledDeltaTime, 0.1f));
+            cockpitLevel = Mathf.MoveTowards(cockpitLevel, cockpit, 0.5f * Mathf.Min(Time.unscaledDeltaTime, 0.1f));
             if (Time.realtimeSinceStartup - cabinLooked > 2f)
             {
                 cabinLooked = Time.realtimeSinceStartup;
@@ -989,21 +1229,90 @@ namespace NaturalLight
                 foreach (Light l in FindObjectsOfType<Light>())
                     if (l != null && l.type != LightType.Directional && (l.cullingMask & ((1 << 16) | (1 << 20))) != 0 && (l.cullingMask & (1 << 15)) == 0 && !l.name.StartsWith("Natural Light")) cabin.Add(l);
             }
+            SetCabin(cabinLevel);
+        }
+
+        float cockpitLevel = 1f;
+
+        /// <summary>The cabin's lamps at so much of their own strength (set once a frame for the portraits, and again for the cockpit's own view as it draws).</summary>
+        void SetCabin(float level)
+        {
             foreach (Light l in cabin)
             {
                 if (l == null) continue;
                 // (if something else has changed a lamp since it was last set here, that is its new strength)
                 if (!cabinWas.ContainsKey(l) || !cabinSet.TryGetValue(l, out float set) || Mathf.Abs(l.intensity - set) > 1e-4f) cabinWas[l] = l.intensity;
-                float now = cabinWas[l] * cabinLevel;
+                float now = cabinWas[l] * level;
                 l.intensity = now; cabinSet[l] = now;
             }
         }
+
+        static bool CockpitView(Camera cam) => InternalCamera.Instance != null && cam.gameObject == InternalCamera.Instance.gameObject;
 
         void CabinBack()
         {
             foreach (KeyValuePair<Light, float> kv in cabinWas)
                 if (kv.Key != null && cabinSet.TryGetValue(kv.Key, out float set) && Mathf.Abs(kv.Key.intensity - set) < 1e-4f) kv.Key.intensity = kv.Value;
-            cabinWas.Clear(); cabinSet.Clear(); cabin.Clear(); cabinLevel = 1f;
+            cabinWas.Clear(); cabinSet.Clear(); cabin.Clear(); cabinLevel = 1f; cockpitLevel = 1f;
+            CabinSunBack();
+        }
+
+        /// <summary>The glow of a cabin's own lamps and instruments, which is all the light there is in a closed cabin at night (as light).</summary>
+        static readonly Color CabinGlow = new Color(0.115f, 0.105f, 0.095f).linear;
+
+        // the sun as the scene's own camera drew it this frame: after the clouds have dimmed it and the air reddened it
+        Color drawnColour = Color.white;
+        float drawnStrength = -1f;
+        readonly Dictionary<IVASun, Color> cabinSunWas = new Dictionary<IVASun, Color>();
+        readonly List<IVASun> cabinSuns = new List<IVASun>();
+        float cabinSunsLooked = -10f;
+
+        /// <summary>The sun's colour and strength as the scene's last camera finds them when it draws (taken as the frame goes).</summary>
+        void Drawing(Camera cam)
+        {
+            if (cam == null || !Keystone.Names.Is(cam, "Camera 00")) return;
+            Light sl = Sun.Instance != null ? Sun.Instance.sunLight : null;
+            if (sl == null) return;
+            drawnColour = sl.color; drawnStrength = sl.intensity;
+        }
+
+        /// <summary>
+        /// The game's sun in the cockpit, as the sun outside is. The game turns a sun of its own with the real one, so that it shines
+        /// in at the windows from the right side, and gives it the real one's strength once a frame (nine tenths of it): but before the
+        /// clouds have dimmed it, and in a white of its own. So under an overcast the sun shone into the cabin in full while outside
+        /// there was none, eight times what reached the craft. Now it has the strength and the colour the scene's camera drew the sun
+        /// with: dimmed by the clouds, reddened by the air at sunset, and gone in a planet's shadow, as the game already had it.
+        /// </summary>
+        void CabinSun()
+        {
+            if (drawnStrength < 0f) return;
+            if (Time.realtimeSinceStartup - cabinSunsLooked > 2f)
+            {
+                cabinSunsLooked = Time.realtimeSinceStartup;
+                cabinSuns.Clear();
+                cabinSuns.AddRange(FindObjectsOfType<IVASun>());
+            }
+            foreach (IVASun s in cabinSuns)
+            {
+                if (s == null) continue;
+                Light l = s.GetComponent<Light>();
+                if (l == null) continue;
+                if (!cabinSunWas.ContainsKey(s)) cabinSunWas[s] = l.color;
+                l.color = drawnColour;
+                l.intensity = drawnStrength * s.intensityScalar;
+            }
+        }
+
+        /// <summary>The cockpit's sun given its own colour back (its strength the game sets afresh every frame).</summary>
+        void CabinSunBack()
+        {
+            foreach (KeyValuePair<IVASun, Color> kv in cabinSunWas)
+            {
+                if (kv.Key == null) continue;
+                Light l = kv.Key.GetComponent<Light>();
+                if (l != null) l.color = kv.Value;
+            }
+            cabinSunWas.Clear(); cabinSuns.Clear(); cabinSunsLooked = -10f;
         }
 
         void Before(Camera cam)
@@ -1032,7 +1341,7 @@ namespace NaturalLight
                 // someone else's doing (Scatterer's, where it dims the sun through the air), and is taken into account next frame.
                 // (Only a dimming is believed. Anything else is somebody setting the sun outright, which cannot be told apart.)
                 Light sunLight = Sun.Instance != null ? Sun.Instance.sunLight : null;
-                if (sunLight != null && sunSetAt == Time.frameCount && cam.name == "Camera 00")
+                if (sunLight != null && sunSetAt == Time.frameCount && Keystone.Names.Is(cam, "Camera 00"))
                 {
                     Color found = sunLight.color;
                     var share = new Color(Share(found.r, sunSet.r), Share(found.g, sunSet.g), Share(found.b, sunSet.b));
@@ -1047,7 +1356,15 @@ namespace NaturalLight
                 GiveStrengthBack();
                 if (!changed) { itsMode = RenderSettings.ambientMode; changed = true; }
                 RenderSettings.ambientMode = AmbientMode.Custom;
-                RenderSettings.ambientProbe = insideProbe;
+                // (the light that comes in at this cockpit's windows, where they are known; until then, a share of the light outside)
+                bool windows = true;
+#if DEV
+                windows = !oldCabin;
+#endif
+                RenderSettings.ambientProbe = windows && Cockpits.Probe(cam, probe, CabinGlow, drawnStrength > 0f ? drawnColour * drawnStrength : Color.black, out SphericalHarmonicsL2 lit) ? lit : insideProbe;
+                if (windows) CabinSun();
+                // (the cabin's lamps for this camera: the cockpit's own view has its eye; the portraits have none)
+                SetCabin(CockpitView(cam) ? cockpitLevel : cabinLevel);
             }
             else if (changed || strengthSet)
             {

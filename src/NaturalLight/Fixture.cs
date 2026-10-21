@@ -66,6 +66,8 @@ namespace NaturalLight
             why = failed;
             // (kept from one scene to the next; read again should the game ever have thrown them away)
             if (stand != null && head != null && Alive()) return true;
+            // (read twice in a game, 0.42 s and 0.47 s, the second at the first flight after the space centre (2026-10-19): what was gone)
+            if (stand != null || head != null) Kit.Log("Natural Light", "the floodlights' fixture was thrown away (" + Gone() + "): read again");
             stand = head = null;
             if (failed != null) return false;
             try
@@ -82,6 +84,24 @@ namespace NaturalLight
             }
         }
 
+        static string Gone()
+        {
+            if (paint == null) return "its paint";
+            if (paint.mainTexture == null) return "its paint's picture";
+            foreach (Piece p in new[] { stand, head })
+            {
+                if (p == null) return "a piece";
+                if (p.Body == null) return "the mesh of its " + p.Name;
+                if (p.LampMaterials != null)
+                    foreach (Material m in p.LampMaterials)
+                    {
+                        if (m == null) return "a lamp's material in its " + p.Name;
+                        if (m.mainTexture == null) return "the picture of " + m.name;
+                    }
+            }
+            return "nothing found gone";
+        }
+
         static bool Alive()
         {
             if (paint == null || paint.mainTexture == null) return false;
@@ -96,8 +116,10 @@ namespace NaturalLight
         static void Load()
         {
             float started = Time.realtimeSinceStartup;
+            keptPictures = 0;
             Texture2D colour = Picture("floodlight_colour.png", false);
             Texture2D bumps = Picture("floodlight_normal.png", true);
+            float pictures = Time.realtimeSinceStartup - started;
             paint = Make("KSP/Bumped Specular", colour, bumps, new Color(0.3f, 0.3f, 0.3f), 0.3f);
             var mats = new Dictionary<string, Material>
             {
@@ -183,7 +205,8 @@ namespace NaturalLight
             }
             if (!found.TryGetValue("stand", out stand) || !found.TryGetValue("head", out head) || head.LampTriangles == null) throw new InvalidDataException("floodlight.mesh has no stand, no head or no lamp in its head");
             if (!markers.TryGetValue("glass", out glass)) throw new InvalidDataException("floodlight.mesh does not say where the glass is");
-            Kit.Log("Natural Light", "the floodlights' fixture read in " + ((Time.realtimeSinceStartup - started) * 1000f).ToString("F0") + " ms: " + (stand.Triangles + head.Triangles) + " triangles, its picture "
+            Kit.Log("Natural Light", "the floodlights' fixture read in " + ((Time.realtimeSinceStartup - started) * 1000f).ToString("F0") + " ms (its pictures " + (pictures * 1000f).ToString("F0") + " ms, "
+                + (keptPictures == 2 ? "both as kept" : keptPictures == 1 ? "one as kept" : "made from their files") + "): " + (stand.Triangles + head.Triangles) + " triangles, its picture "
                 + colour.width + " across" + (mats["glass"] == null ? "; no see-through shader for its glass, which is left out" : ""));
         }
 
@@ -242,9 +265,73 @@ namespace NaturalLight
         /// A picture from the PluginData folder, with its smaller sizes made and squeezed as the game's own are. A normal map
         /// (`bumps`) is laid out as the game's shaders read one: its x in alpha, its y in green, red and blue full.
         /// </summary>
+        // (Since 0.12.0: what is made of each picture (unpacked, its smaller copies made, squeezed into the graphics card's own format)
+        // is kept beside it, in PluginData/kept, and read back while the picture's file is what it was. Unpacking and squeezing the two
+        // pictures of 2048 took most of the 0.44 s the fixture took to read at the first space centre of every game (2026-10-20).)
+        static int keptPictures;
+        const string KeptMark = "NLTEX001";
+
+        static string KeptPath(string file) => Path.Combine(Path.Combine(Folder, "kept"), file + ".tex");
+
+        static Texture2D FromKept(string file, FileInfo source, bool bumps)
+        {
+            Texture2D tex = null;
+            try
+            {
+                string kept = KeptPath(file);
+                if (!File.Exists(kept)) return null;
+                using (var r = new BinaryReader(File.OpenRead(kept)))
+                {
+                    if (Encoding.ASCII.GetString(r.ReadBytes(8)) != KeptMark) return null;
+                    if (r.ReadInt64() != source.Length || r.ReadInt64() != source.LastWriteTimeUtc.Ticks || r.ReadBoolean() != bumps) return null;
+                    var format = (TextureFormat)r.ReadInt32();
+                    int w = r.ReadInt32(), h = r.ReadInt32(), mips = r.ReadInt32(), n = r.ReadInt32();
+                    byte[] data = r.ReadBytes(n);
+                    if (data.Length != n) return null;
+                    tex = new Texture2D(w, h, format, mips > 1, bumps) { name = "Natural Light " + file, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 4, hideFlags = HideFlags.DontUnloadUnusedAsset };
+                    if (tex.mipmapCount != mips) { UnityEngine.Object.Destroy(tex); return null; }
+                    tex.LoadRawTextureData(data);
+                    tex.Apply(false, true);
+                    keptPictures++;
+                    return tex;
+                }
+            }
+            // (a kept file that cannot be read back is passed over: the picture is made from its file again, and kept anew)
+            catch (Exception) { if (tex != null) UnityEngine.Object.Destroy(tex); return null; }
+        }
+
+        static void Keep(string file, FileInfo source, bool bumps, Texture2D tex)
+        {
+            // (only a squeezed one: the unsqueezed would be four times the size of the file it came from)
+            if (tex.format != TextureFormat.DXT1 && tex.format != TextureFormat.DXT5) return;
+            byte[] data = tex.GetRawTextureData();
+            var format = tex.format; int w = tex.width, h = tex.height, mips = tex.mipmapCount;
+            long size = source.Length, stamp = source.LastWriteTimeUtc.Ticks;
+            string kept = KeptPath(file);
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(kept));
+                    string making = kept + ".making";
+                    using (var o = new BinaryWriter(File.Create(making)))
+                    {
+                        o.Write(Encoding.ASCII.GetBytes(KeptMark)); o.Write(size); o.Write(stamp); o.Write(bumps);
+                        o.Write((int)format); o.Write(w); o.Write(h); o.Write(mips); o.Write(data.Length); o.Write(data);
+                    }
+                    if (File.Exists(kept)) File.Delete(kept);
+                    File.Move(making, kept);
+                }
+                catch (Exception) { }
+            });
+        }
+
         static Texture2D Picture(string file, bool bumps)
         {
             string path = Path.Combine(Folder, file);
+            var source = new FileInfo(path);
+            Texture2D had = FromKept(file, source, bumps);
+            if (had != null) return had;
             var raw = new Texture2D(4, 4, TextureFormat.RGBA32, false, bumps);
             if (!raw.LoadImage(File.ReadAllBytes(path))) throw new InvalidDataException("could not read " + file);
             Color32[] px = raw.GetPixels32();
@@ -255,6 +342,7 @@ namespace NaturalLight
             tex.SetPixels32(px);
             tex.Apply(true, false);
             try { tex.Compress(true); } catch (Exception ex) { Kit.Log("Natural Light", "could not squeeze " + file + ": " + ex.Message); }
+            try { Keep(file, source, bumps, tex); } catch (Exception) { }
             tex.Apply(false, true);
             return tex;
         }
