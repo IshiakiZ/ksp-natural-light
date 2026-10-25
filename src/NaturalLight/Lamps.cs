@@ -289,7 +289,7 @@ namespace NaturalLight
         void Nearest(bool wanted, float strength)
         {
             close.Clear();
-            Vessel v = wanted && HighLogic.LoadedSceneIsFlight && FlightGlobals.ready ? FlightGlobals.ActiveVessel : null;
+            Vessel v = wanted && HighLogic.LoadedSceneIsFlight && Daylight.FlightReady ? FlightGlobals.ActiveVessel : null;
             // (the middle of the runway is thirty-two metres from either row: a craft there is still lit, faintly, by the nearest lamps)
             const float Reach = 45f;
             if (v != null)

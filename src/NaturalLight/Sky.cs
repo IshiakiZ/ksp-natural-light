@@ -14,7 +14,7 @@ namespace NaturalLight
     /// still look like space." So it is mostly black, as space is. What is added is faint by day's measure
     /// and is nearly all near the band of the galaxy, where such things are: half a dozen or so nebulae of
     /// glowing gas (the red of hydrogen at the heart, teal and blue at the edges; some blue ones that only
-    /// throw back starlight; a ring left by a dead star), two or three small far galaxies well off it, and
+    /// throw back starlight; the torn shell of a star that blew up), two or three small far galaxies well off it, and
     /// some hundreds of stars brighter than the game's own, in the colours stars have. The band itself is
     /// the game's, and is left alone.
     ///
@@ -25,11 +25,15 @@ namespace NaturalLight
     /// whatever sky is installed.
     ///
     /// It is drawn as six more faces just inside the game's six, with light added to what is there, by one
-    /// of the game's own shaders. The game dims its sky in air by day and when the sun is in view, and this
+    /// of the game's own shaders. (Drawn by this mod each frame for the camera that draws the sky, with the faces' own
+    /// meshes and places: no object of its own among the sky's. Until 2026-10-24 they were objects inside the game's faces,
+    /// and Parallax, which takes the sky's six faces as every renderer it finds there, found twelve and threw: its planets
+    /// seen from orbit lost the sky's reflection. Seen on the PC with Parallax Continued 1.0.6.) The game dims its sky in air by day and when the sun is in view, and this
     /// mod dims it when anything bright is (see FilmLook): the added sky is dimmed by exactly as much, by
     /// reading back how much the game's own faces have been.
     /// </summary>
     [KSPAddon(KSPAddon.Startup.Instantly, true)]
+    [DefaultExecutionOrder(200)]
     public sealed class DeepSky : MonoBehaviour
     {
         const int Size = 1024;
@@ -41,8 +45,8 @@ namespace NaturalLight
             public Vector3 Corner, Across, Up;      // where its picture's bottom left is (in the sky's own frame), and the way to its bottom right and its top left
             public Color32[] Dots;                  // the added picture, once made
             public Texture2D Picture;
-            public GameObject Added;
-            public Renderer Shown;
+            public Mesh Mesh;                       // the game's face's own
+            public MaterialPropertyBlock Props;     // its picture and how bright it is shown
         }
 
         readonly List<Face> faces = new List<Face>();
@@ -52,7 +56,8 @@ namespace NaturalLight
         bool working, applied;
         int seedMade = -1;
         float brightest;
-        static readonly MaterialPropertyBlock block = new MaterialPropertyBlock(), mine = new MaterialPropertyBlock();
+        static readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
+        bool showing, hooked;
         public static string Report = "";
 
         void Awake()
@@ -63,8 +68,24 @@ namespace NaturalLight
 
         void OnDestroy()
         {
-            foreach (Face f in faces) { if (f.Added != null) Destroy(f.Added); if (f.Picture != null) Destroy(f.Picture); }
+            if (hooked) Camera.onPreCull -= Draw;
+            foreach (Face f in faces) if (f.Picture != null) Destroy(f.Picture);
             if (ink != null) Destroy(ink);
+        }
+
+        /// <summary>The added faces, for the camera that draws the game's sky, where the game's faces are as this frame has them.</summary>
+        void Draw(Camera cam)
+        {
+            if (!showing || cam == null) return;
+            foreach (Face f in faces)
+            {
+                if (f.Its == null || f.Mesh == null || f.Props == null || !f.Its.gameObject.activeInHierarchy) continue;
+                int layer = f.Its.gameObject.layer;
+                if ((cam.cullingMask & (1 << layer)) == 0) continue;
+                // (just inside the game's own face, so that it is in front of it)
+                Matrix4x4 at = f.Its.transform.localToWorldMatrix * Matrix4x4.Scale(Vector3.one * 0.985f);
+                Graphics.DrawMesh(f.Mesh, at, ink, layer, cam, 0, f.Props, UnityEngine.Rendering.ShadowCastingMode.Off, false);
+            }
         }
 
         void Update()
@@ -77,7 +98,7 @@ namespace NaturalLight
             // ---- a new sky to work out: the first time, when the game has made its sky anew, or when another is asked for
             if ((now != sky || seed != seedMade) && !working)
             {
-                foreach (Face f in faces) { if (f.Added != null) Destroy(f.Added); if (f.Picture != null) Destroy(f.Picture); }
+                foreach (Face f in faces) if (f.Picture != null) Destroy(f.Picture);
                 faces.Clear();
                 sky = now; seedMade = seed; applied = false; made = 0;
                 if (!Measure()) { sky = null; return; }
@@ -103,30 +124,34 @@ namespace NaturalLight
                 applied = true;
             }
             if (!applied) { Report = "The deep sky is being worked out."; return; }
+            Report = "";
+        }
 
-            // ---- as bright as the game's own sky is just now (it is dimmed in air by day, towards the sun, and by this mod's eye)
+        void LateUpdate()
+        {
+            // ---- as bright as the game's own sky is just now (it is dimmed in air by day, towards the sun, and by this mod's eye; read
+            // after the game and the mod's twilight have set it: see Twilight)
+            if (!applied || sky == null || sky != GalaxyCubeControl.Instance || Daylight.Deep == null || !Daylight.Deep || !Daylight.On) return;
             Show(true);
             float most = Mathf.Max(sky.maxGalaxyColor.r, Mathf.Max(sky.maxGalaxyColor.g, sky.maxGalaxyColor.b));
             brightest = Mathf.Max(brightest, most);
             float strength = Daylight.SkyGlow != null ? (float)Daylight.SkyGlow : 1f;
             foreach (Face f in faces)
             {
-                if (f.Its == null || f.Shown == null) continue;
+                if (f.Its == null || f.Props == null) continue;
                 f.Its.GetPropertyBlock(block);
                 Color c = block.isEmpty ? sky.maxGalaxyColor : block.GetColor("_Color");
                 float at = brightest > 1e-4f ? Mathf.Clamp01(Mathf.Max(c.r, Mathf.Max(c.g, c.b)) / brightest) : 1f;
                 // (the game's shader for adding light doubles what it is given: half is full strength; and the game shows its own
                 // stars at about three quarters of their picture's brightness, so the added sky is shown at about as much)
                 float tint = 0.5f * at * 0.8f * strength;
-                mine.SetColor("_TintColor", new Color(tint, tint, tint, 0.5f));
-                f.Shown.SetPropertyBlock(mine);
+                f.Props.SetColor("_TintColor", new Color(tint, tint, tint, 0.5f));
             }
-            Report = "";
         }
 
         void Show(bool on)
         {
-            foreach (Face f in faces) if (f.Shown != null && f.Shown.enabled != on) f.Shown.enabled = on;
+            showing = on;
         }
 
         /// <summary>The game's six faces: where each one's picture lies, in the sky's own frame.</summary>
@@ -239,17 +264,11 @@ namespace NaturalLight
                 f.Picture.SetPixels32(f.Dots);
                 f.Picture.Apply(true, true);
                 f.Dots = null;
-                f.Added = new GameObject("Natural Light deep sky " + f.Name) { layer = f.Its.gameObject.layer };
-                f.Added.transform.SetParent(f.Its.transform, false);
-                f.Added.transform.localScale = Vector3.one * 0.985f;                    // (just inside the game's own face, so that it is in front of it)
-                f.Added.AddComponent<MeshFilter>().sharedMesh = f.Its.GetComponent<MeshFilter>().sharedMesh;
-                MeshRenderer r = f.Added.AddComponent<MeshRenderer>();
-                r.sharedMaterial = ink;
-                r.material.mainTexture = f.Picture;                                    // (a copy of its own, which goes when it does)
-                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                r.receiveShadows = false;
-                f.Shown = r;
+                f.Mesh = f.Its.GetComponent<MeshFilter>().sharedMesh;
+                f.Props = new MaterialPropertyBlock();
+                f.Props.SetTexture("_MainTex", f.Picture);
             }
+            if (!hooked) { Camera.onPreCull += Draw; hooked = true; }
             Kit.Log("Natural Light", "the deep sky is laid over " + faces.Count + " faces of the game's sky");
         }
 
@@ -408,14 +427,25 @@ namespace NaturalLight
                     Vector3 q = p + pull * 1.6f;
                     if (c.Kind == 2)
                     {
-                        // a ring: what a dead star threw off, brightest at its rim, in threads
-                        float rim = Mathf.Sqrt(far2) + 0.1f * pull.x, ring = Mathf.Exp(-(rim - 1f) * (rim - 1f) / 0.012f), fill = Mathf.Exp(-far2 / 0.45f) * 0.1f;
-                        float threads = 0.55f + 1.1f * Threads(q * 1.4f, 3);
-                        float light = (ring * threads + fill) * 0.1f * c.Bright;
-                        // (and the dead star itself, in the middle)
-                        light += Mathf.Exp(-far2 * 900f) * 0.5f;
-                        float outer = Mathf.Clamp01((rim - 0.9f) * 3f);
-                        r += light * Mathf.Lerp(c.Heart.r, c.Edge.r, outer); g += light * Mathf.Lerp(c.Heart.g, c.Edge.g, outer); b += light * Mathf.Lerp(c.Heart.b, c.Edge.b, outer);
+                        // The shell a star threw off as it blew up, degrees across, as the Veil and the Vela remnant are: arcs of thin
+                        // threads round a ragged rim, brighter on the side where it runs into thicker gas, broken where the gas is thin,
+                        // the teal of oxygen and the red of hydrogen wound through each other; no star left in the middle. (Drawn as a
+                        // round ring, even all the way round and with a star at its heart, it read as a lens's ghost: a green ring high in
+                        // the night sky on the hill, 2026-10-24, taken at first for one of the flares'.)
+                        float rim = Mathf.Sqrt(far2) + 0.3f * pull.x + 0.14f * pull.y;
+                        float shell = Mathf.Exp(-(rim - 1f) * (rim - 1f) / 0.02f);
+                        if (shell < 0.002f) continue;
+                        // (lit in arcs: where slow noise round the rim says, about half of the way round, in two or three stretches)
+                        float round = Mathf.Atan2(y, x);
+                        var on = new Vector3(Mathf.Cos(round) * 1.7f + c.Twist, Mathf.Sin(round) * 1.7f - c.Twist, c.Twist * 0.61f);
+                        float arcs = Mathf.Clamp01(Billows(on, 3) * 2.6f + 0.35f);
+                        // (and brighter on one side)
+                        float near = Mathf.Max(0.2f, Mathf.Sqrt(far2));
+                        float lean = 0.3f + 0.7f * Mathf.Clamp01(0.5f + 0.5f * (x * 0.8f + y * 0.6f) / near);
+                        float threads = Threads(q * 1.6f, 3);
+                        float light = shell * arcs * lean * (threads * threads * 1.6f + 0.12f) * 0.42f * c.Bright;
+                        float mix = Mathf.Clamp01(Mathf.Clamp01((rim - 0.95f) * 4f) + 0.5f * (Threads(q * 2.3f + new Vector3(5f, 9f, 1f), 2) - 0.4f));
+                        r += light * Mathf.Lerp(c.Heart.r, c.Edge.r, mix); g += light * Mathf.Lerp(c.Heart.g, c.Edge.g, mix); b += light * Mathf.Lerp(c.Heart.b, c.Edge.b, mix);
                         continue;
                     }
                     float body = Mathf.Exp(-far2 / 1.5f);

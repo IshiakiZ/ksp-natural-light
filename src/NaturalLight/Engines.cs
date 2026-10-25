@@ -141,7 +141,7 @@ namespace NaturalLight
 
         void LateUpdate()
         {
-            bool wanted = !others && Daylight.On && Daylight.Engines != null && Daylight.Engines && FlightGlobals.ready && FlightGlobals.ActiveVessel != null && !MapView.MapIsEnabled;
+            bool wanted = !others && Daylight.On && Daylight.Engines != null && Daylight.Engines && Daylight.FlightReady && FlightGlobals.ActiveVessel != null && !MapView.MapIsEnabled;
             groups.Clear();
             if (wanted)
             {

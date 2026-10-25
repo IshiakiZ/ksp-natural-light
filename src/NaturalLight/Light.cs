@@ -46,7 +46,7 @@ namespace NaturalLight
     [KSPAddon(KSPAddon.Startup.FlightAndKSC, false)]
     public sealed class Daylight : MonoBehaviour
     {
-        public const string Version = "0.12.0";
+        public const string Version = "0.13.0";
 
         static Mod mod;
         /// <summary>The mod's page in Keystone's window: for the parts of the mod that have something to say on it.</summary>
@@ -56,7 +56,7 @@ namespace NaturalLight
         static Choice through;
         static Toggle fine, inside, rays;
         static Slider thrown;
-        public static Toggle Engines, Floods, Filmed, Windows, Deep, Shafts, Smoke, Crew, Runway, Veil, LampBeams, RedLamps, NavLights;
+        public static Toggle Engines, Floods, Filmed, Windows, Deep, Shafts, Smoke, Crew, Runway, Veil, LampBeams, RedLamps, NavLights, FarLit, FarCraft, Dusk, Reflections;
 
         /// <summary>The light from all round, the sky's and the ground's and other worlds', taken together (as light): for the other parts of the mod.</summary>
         public static Color Around = Color.black;
@@ -79,6 +79,23 @@ namespace NaturalLight
         /// <summary>Whether the mod is on at all (its first setting puts out every part of it, the lamps included).</summary>
         public static bool On => on != null && on;
 
+        /// <summary>
+        /// Whether there is a flight to light: the game's FlightGlobals.ready, and also the frame or so it has that false while it
+        /// gives the controls to another craft near by (a switch, a docking), the new craft already in place. Taken at its word,
+        /// every switch had one frame in the game's own light, the ground darker, and the lamps, the engines' light and the visors
+        /// out: a flash (found 2026-10-24 with the Aeris 4A and its pilot on the runway; mended 2026-10-25).
+        /// </summary>
+        public static bool FlightReady
+        {
+            get
+            {
+                if (FlightGlobals.ready) { readyFrame = Time.frameCount; return true; }
+                Vessel v = FlightGlobals.ActiveVessel;
+                return HighLogic.LoadedSceneIsFlight && Time.frameCount - readyFrame <= 5 && v != null && v.loaded && v.mainBody != null;
+            }
+        }
+        static int readyFrame = -100;
+
         /// <summary>Whether there is a place being lit just now (a craft in flight, or the space centre), where it is, and on what world: for the other parts of the mod.</summary>
         public static bool Near;
         public static Vector3d Here;
@@ -92,7 +109,7 @@ namespace NaturalLight
             body = null; place = Vector3d.zero; height = above = latitude = longitude = 0.0; overWater = false;
             if (HighLogic.LoadedSceneIsFlight)
             {
-                Vessel v = FlightGlobals.ready ? FlightGlobals.ActiveVessel : null;
+                Vessel v = FlightReady ? FlightGlobals.ActiveVessel : null;
                 if (v == null || v.mainBody == null) return false;
                 body = v.mainBody; place = v.GetWorldPos3D();
                 height = Math.Max(0.0, v.altitude); above = Math.Max(0.0, v.radarAltitude);
@@ -147,6 +164,8 @@ namespace NaturalLight
                 mod.Heading("Other worlds");
                 worlds = mod.Slider("worlds", "Light of other worlds", 1f, 0f, 3f, "", 2, "Every world in the sky throws back sunlight: the Mun over Kerbin by night, Kerbin over the Mun, Jool over its moons. Each lights the craft from its own side, in its own colour, by how much of it is lit and how large it stands.");
                 eyes = mod.Slider("eyes", "Night eyes", 1f, 0f, 2f, "", 2, "In the dark the eye opens up, and moonlight that is a hundred-thousandth of daylight is enough to see by. How far it does so here: 0 shows other worlds' light as weak as it truly is (next to nothing), 1 makes a full Mun enough to fly by.");
+                FarLit = mod.Toggle("farlights", "Far worlds as points of light", true, "A world too far off for the game to draw (smaller than a dot of the screen) is still in the sky: a point of light as bright as it really is, by its size, its colour, how much of its lit side is turned this way and how far it and the sun are. From Kerbin by night Jool and Duna outshine every star and Eve near its brightest outshines them all; they come out at dusk before the stars do, are dimmed and reddened low down, and are put out by daylight as the stars are. Zoomed in, the game's own drawing of a world takes over. (The idea is Distant Object Enhancement's.)");
+                FarCraft = mod.Toggle("farcraft", "Far craft as points of light", true, "Craft too far off to be drawn, in orbit or in the air, catch the sun as points of light: after sunset at the space centre a craft in a low orbit crosses the sky as a moving star and goes out as it passes into Kerbin's shadow. Bright by the size of the craft. With far worlds as points of light only.");
                 mod.Heading("Engines");
                 Engines = mod.Toggle("engines", "Engine light", true, "A running engine lights what is round it: the craft, the pad, the ground it is landing on.");
                 EngineLight = mod.Slider("enginelight", "How bright", 1f, 0.2f, 3f, "", 2, "How strongly engines light their surroundings.");
@@ -163,12 +182,15 @@ namespace NaturalLight
                 RunwayLight = mod.Slider("runwaylight", "How bright", 1f, 0.2f, 3f, "", 2, "How strongly the runway's lamps light the ground round them.");
                 Windows = mod.Toggle("windows", "Light from windows", true, "The lit windows of the space centre's buildings throw their light on the ground in front of them: as wide as the windows, further out the higher they are, brighter the more of the wall is glass. Where the windows are is found on the buildings themselves.");
                 WindowLight = mod.Slider("windowlight", "How bright", 1f, 0.2f, 3f, "", 2, "How strongly the windows light the ground.");
+                mod.Heading("Kerbals");
+                Reflections = mod.Toggle("visors", "Visors mirror what is round them", true, "A kerbal's visor is a curved mirror with the world in it, as in every photograph of anyone in a spacesuit: the ground, the craft beside them, the sky, the planet below. Drawn from the head of the kerbal nearest the camera, a face of a cube a frame. Off: the visor as the game has it (with the game's own reflections setting, the ground and the planets only).");
                 mod.Heading("In the buildings");
                 Crew = mod.Toggle("crew", "The ground crew stand in the light they are in", true, "In the assembly building and the hangar the game draws the ground crew and their trucks as bright in the darkest corner as under a floodlight, and the rocket's shadow passes over them without touching them. With this each is as bright as the floor it is on, and darkens in the rocket's shadow as the floor does.");
                 mod.Heading("Deep sky");
                 Deep = mod.Toggle("deep", "Nebulae and a deeper sky", true, "Nebulae, a faint glow along the band of the galaxy, a few far galaxies and some hundreds of brighter coloured stars, laid over the game's own sky of stars. Space stays mostly black. It is all worked out from noise when the game starts (about a second, on the side), and sits on the band of whatever sky is installed.");
                 SkyGlow = mod.Slider("skyglow", "How bright", 1f, 0f, 3f, "", 2, "How strongly the deep sky shows.");
                 SkySeed = mod.Slider("skyseed", "Which sky", 7f, 1f, 60f, "", 0, "Another number, another sky: different nebulae in different places.");
+                Dusk = mod.Toggle("dusk", "Stars come out at dusk", true, "The game hides its stars in air until the sun is far below the horizon and then lets them all out at once, and keeps them dim all night. Here they come out as the sky darkens, the brightest a few minutes after sunset and the faintest at full night, and at night they are as bright as clean air lets them be. Sooner in thin air (Duna), later in thick (Eve). Far worlds and craft come out with them.");
                 mod.Heading("Film");
                 Filmed = mod.Toggle("film", "Film look", true, "The picture developed as a film camera's would be. The game cuts off flat whatever is brighter than white; film lets it roll over into a glow. Contrast is stronger, with the colours left as the light makes them; creases and the places where things meet are darker, and the camera's eye opens and closes with how bright the view is. It is done by the TUFX mod's post-processing, and does nothing where TUFX is not installed.");
                 Punch = mod.Slider("punch", "Contrast and colour", 1f, 0f, 2f, "", 2, "How strong the film's contrast is. At 1 the colours are left as the light makes them; above 1 colour is added as well, for a stronger look. 0: the film curve alone.");
@@ -410,19 +432,34 @@ namespace NaturalLight
         }
 
         static readonly Dictionary<string, Globe> globes = new Dictionary<string, Globe>();
+        // (worlds whose picture is not there yet, and when to look again)
+        static readonly Dictionary<string, float> lookAgain = new Dictionary<string, float>();
 
         /// <summary>
         /// A small copy of the picture the game draws a planet with from afar, to read the ground's colour off. (The
-        /// picture itself cannot be read from where it is kept, so it is drawn once into something that can.)
+        /// picture itself cannot be read from where it is kept, so it is drawn once into something that can.) Nothing while the
+        /// world's picture is not there yet, asked again every ten seconds.
         /// </summary>
         static Globe GlobeOf(CelestialBody body)
         {
             if (globes.TryGetValue(body.bodyName, out Globe known)) return known;
+            if (lookAgain.TryGetValue(body.bodyName, out float when) && Time.realtimeSinceStartup < when) return null;
             Globe made = null;
+            bool waiting = false;
             try
             {
                 Renderer face = body.scaledBody != null ? body.scaledBody.GetComponent<Renderer>() : null;
-                Texture picture = face != null && face.sharedMaterial != null && face.sharedMaterial.HasProperty("_MainTex") ? face.sharedMaterial.GetTexture("_MainTex") : null;
+                Material drawn = face != null ? face.sharedMaterial : null;
+                // (Parallax keeps a world's colour in a map of its own, _ColorMap, and leaves _MainTex as Unity's own white stand-in,
+                // four dots by four: read there, every world was taken as white, its far light and the light it throws too bright. It
+                // fills _ColorMap only once it has loaded that world's picture, Kerbin's and the Mun's at first; until then the world
+                // is taken as it looks without Parallax, and looked at again. Found on the PC beside Parallax Continued 1.0.6,
+                // 2026-10-24)
+                Texture picture = Picture(drawn, "_ColorMap") ?? Picture(drawn, "_MainTex");
+#if DEV
+                if (standIn.Contains(body.bodyName)) picture = null;
+#endif
+                waiting = picture == null && drawn != null && (drawn.HasProperty("_ColorMap") || drawn.HasProperty("_MainTex"));
                 if (picture != null)
                 {
                     const int W = 512, H = 256;
@@ -440,8 +477,60 @@ namespace NaturalLight
                 }
             }
             catch (Exception ex) { Kit.Log("Natural Light", "could not read the colour of " + body.bodyName + "'s ground (" + ex.Message + "): taking it as grey"); }
+            if (waiting) { lookAgain[body.bodyName] = Time.realtimeSinceStartup + 10f; return null; }
             globes[body.bodyName] = made;
+            lookAgain.Remove(body.bodyName);
             return made;
+        }
+
+#if DEV
+        static readonly HashSet<string> standIn = new HashSet<string>();
+        /// <summary>(Development build: a world's picture taken as not there yet, as beside Parallax before it has loaded it: "Duna";
+        /// "off" lets them all be read again.)</summary>
+        public static string StandIn(string name)
+        {
+            if (name == "off") { foreach (string n in standIn) { faces.Remove(n); lookAgain.Remove(n); } standIn.Clear(); return "every world's picture read as it is"; }
+            standIn.Add(name); globes.Remove(name); faces.Remove(name); lookAgain.Remove(name);
+            return name + "'s picture taken as not there yet";
+        }
+#endif
+
+        /// <summary>A world's picture in a slot of its material, if it is one: not empty, and not one of Unity's own stand-ins.</summary>
+        static Texture Picture(Material m, string slot)
+        {
+            if (m == null || !m.HasProperty(slot)) return null;
+            Texture t = m.GetTexture(slot);
+            return t != null && t.width >= 64 && t.height >= 32 ? t : null;
+        }
+
+        /// <summary>
+        /// The mean colour of the stock worlds' ground, as light, read off their own pictures (2026-10-24, on the Mac, with the
+        /// pictures the game comes with and Scatterer's for Kerbin): for while a world's picture is not there to be read, as beside
+        /// Parallax until it has loaded it. Any other world is grey meanwhile.
+        /// </summary>
+        static bool StockGround(string name, out Color c)
+        {
+            switch (name)
+            {
+                case "Kerbin": c = new Color(0.217f, 0.239f, 0.200f); return true;
+                case "Mun": c = new Color(0.230f, 0.218f, 0.208f); return true;
+                case "Minmus": c = new Color(0.361f, 0.504f, 0.390f); return true;
+                case "Moho": c = new Color(0.087f, 0.061f, 0.048f); return true;
+                case "Eve": c = new Color(0.043f, 0.030f, 0.052f); return true;
+                case "Gilly": c = new Color(0.120f, 0.084f, 0.069f); return true;
+                case "Duna": c = new Color(0.387f, 0.302f, 0.286f); return true;
+                case "Ike": c = new Color(0.124f, 0.123f, 0.124f); return true;
+                case "Dres": c = new Color(0.086f, 0.084f, 0.082f); return true;
+                case "Jool": c = new Color(0.088f, 0.174f, 0.036f); return true;
+                case "Laythe": c = new Color(0.020f, 0.021f, 0.028f); return true;
+                case "Vall": c = new Color(0.210f, 0.338f, 0.360f); return true;
+                case "Tylo": c = new Color(0.184f, 0.164f, 0.137f); return true;
+                case "Bop": c = new Color(0.050f, 0.036f, 0.029f); return true;
+                case "Pol": c = new Color(0.298f, 0.237f, 0.125f); return true;
+                case "Eeloo": c = new Color(0.208f, 0.226f, 0.225f); return true;
+            }
+            c = new Color(0.1f, 0.1f, 0.1f);
+            return false;
         }
 
         /// <summary>
@@ -453,7 +542,7 @@ namespace NaturalLight
         static Color GroundColour(CelestialBody body, double latitude, double longitude, double reach, bool close, bool overWater)
         {
             Globe globe = GlobeOf(body);
-            if (globe == null) return new Color(0.3f, 0.3f, 0.3f);
+            if (globe == null) return StockGround(body.bodyName, out Color stock) ? stock.gamma : new Color(0.3f, 0.3f, 0.3f);
             reach = Math.Max(0.4, Math.Min(60.0, reach));
             float r = 0f, g = 0f, b = 0f, weight = 0f;
             bool sorted = close && body.ocean && body.pqsController != null;
@@ -640,6 +729,9 @@ namespace NaturalLight
             sunDimmedElsewhere = false;
             Clouds(body, place, toSun, ref cloudSun, ref cloudSky, ref cloudGrey, ref dust);
             cloudSunNow = cloudSun;
+#if DEV
+            if (sunsKept != null && sunsKept.Count < 20000 && sunKeptFrame != Time.frameCount) { sunKeptFrame = Time.frameCount; sunsKept.Add(cloudSun); }
+#endif
             if (body.atmosphere)
             {
                 skyColour = Color.Lerp(SkyOf(body), new Color(0.80f, 0.82f, 0.85f), cloudGrey);
@@ -1024,7 +1116,7 @@ namespace NaturalLight
                 catch (Exception) { }
             }
             bool wanted = on && fine && SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D11 && !scattererShadows.Value
-                && QualitySettings.shadowCascades == 4 && FlightCamera.fetch != null && FlightGlobals.ready && !MapView.MapIsEnabled;
+                && QualitySettings.shadowCascades == 4 && FlightCamera.fetch != null && FlightReady && !MapView.MapIsEnabled;
             if (!wanted)
             {
                 if (haveSplit) { QualitySettings.shadowCascade4Split = itsSplit; haveSplit = false; }
@@ -1042,18 +1134,80 @@ namespace NaturalLight
 
         static readonly Dictionary<string, Color> faces = new Dictionary<string, Color>();
 
-        /// <summary>The colour of a world as a whole (the mean of its picture), as light.</summary>
-        static Color FaceOf(CelestialBody body)
+        /// <summary>Whether a world's colour has been read yet (FaceOf copies its picture back from the card the first time).</summary>
+        internal static bool FaceKnown(CelestialBody body) => faces.ContainsKey(body.bodyName);
+
+#if DEV
+        static System.Collections.Generic.List<float> sunsKept;
+        static int sunKeptFrame = -1;
+
+        /// <summary>(Development build: "start" keeps, each frame, how much of the sun the clouds let through as the light is set from it;
+        /// "read" says how it went from frame to frame: for the weather's shade given in steps or eased, 2026-10-25.)</summary>
+        public static string SunSteps(string arg)
         {
-            if (faces.TryGetValue(body.bodyName, out Color known)) return known;
-            Color face = new Color(0.1f, 0.1f, 0.1f);
-            Globe globe = GlobeOf(body);
-            if (globe != null)
+            if ((arg ?? "").Trim() == "start") { sunsKept = new System.Collections.Generic.List<float>(); sunKeptFrame = -1; return "keeping"; }
+            System.Collections.Generic.List<float> s = sunsKept;
+            sunsKept = null;
+            if (s == null || s.Count < 2) return "nothing kept";
+            float least = 1f, most = 0f, jump = 0f;
+            int still = 0, small = 0, steps = 0, big = 0;
+            for (int i = 0; i < s.Count; i++) { least = Mathf.Min(least, s[i]); most = Mathf.Max(most, s[i]); }
+            for (int i = 1; i < s.Count; i++)
             {
-                double r = 0, g = 0, b = 0; int n = 0;
-                for (int i = 0; i < globe.Map.Length; i += 7) { Color c = ((Color)globe.Map[i]).linear; r += c.r; g += c.g; b += c.b; n++; }
-                if (n > 0) face = new Color((float)(r / n), (float)(g / n), (float)(b / n));
+                float d = Mathf.Abs(s[i] - s[i - 1]);
+                jump = Mathf.Max(jump, d);
+                if (d < 1e-5f) still++; else if (d < 0.005f) small++; else if (d < 0.03f) steps++; else big++;
             }
+            return s.Count + " frames, the sun let through " + least.ToString("F3") + " to " + most.ToString("F3") + "; from frame to frame: unchanged " + still + ", under 0.005 " + small
+                   + ", 0.005-0.03 " + steps + ", over 0.03 " + big + "; the most " + jump.ToString("F3");
+        }
+#endif
+
+#if DEV
+        /// <summary>
+        /// (Development build: each world's far-off material as it is now (its shader, its _ColorMap and _MainTex), and the colour
+        /// FaceOf took for it. Beside Parallax, 2026-10-24, the far lights' magnitudes did not change with _ColorMap read first.)
+        /// </summary>
+        public static string Globes()
+        {
+            if (FlightGlobals.Bodies == null) return "no worlds";
+            var o = new System.Text.StringBuilder();
+            foreach (CelestialBody b in FlightGlobals.Bodies)
+            {
+                if (b == null || b.isStar) continue;
+                Renderer face = b.scaledBody != null ? b.scaledBody.GetComponent<Renderer>() : null;
+                Material m = face != null ? face.sharedMaterial : null;
+                o.Append(b.bodyName + ": " + (m == null ? "no material" : m.name + " (" + m.shader.name + ")") + "; _ColorMap " + Map(m, "_ColorMap") + "; _MainTex " + Map(m, "_MainTex")
+                         + (face != null ? "; renderers " + b.scaledBody.GetComponents<Renderer>().Length + ", materials " + face.sharedMaterials.Length : "")
+                         + (faces.TryGetValue(b.bodyName, out Color c) ? "; taken as " + c : "; not read yet")
+                         + (globes.TryGetValue(b.bodyName, out Globe g) && g != null ? "; the ground's mean " + MeanOf(g).ToString("F3") : "") + "\n");
+            }
+            return o.ToString();
+        }
+
+        static string Map(Material m, string name)
+        {
+            if (m == null || !m.HasProperty(name)) return "none";
+            Texture t = m.GetTexture(name);
+            return t == null ? "empty" : "'" + t.name + "' " + t.width + "x" + t.height;
+        }
+#endif
+
+        /// <summary>The mean of a world's picture, as light.</summary>
+        static Color MeanOf(Globe globe)
+        {
+            double r = 0, g = 0, b = 0; int n = 0;
+            for (int i = 0; i < globe.Map.Length; i += 7) { Color c = ((Color)globe.Map[i]).linear; r += c.r; g += c.g; b += c.b; n++; }
+            return n > 0 ? new Color((float)(r / n), (float)(g / n), (float)(b / n)) : new Color(0.1f, 0.1f, 0.1f);
+        }
+
+        /// <summary>The colour of a world as a whole (the mean of its picture), as light.</summary>
+        internal static Color FaceOf(CelestialBody body)
+        {
+            // (a world taken meanwhile as it looks without Parallax is read again once it is time to look for its picture)
+            if (faces.TryGetValue(body.bodyName, out Color known) && !(lookAgain.TryGetValue(body.bodyName, out float when) && Time.realtimeSinceStartup >= when)) return known;
+            Globe globe = GlobeOf(body);
+            Color face = globe != null ? MeanOf(globe) : StockGround(body.bodyName, out Color stock) ? stock : new Color(0.1f, 0.1f, 0.1f);
             // (air and cloud throw back about a sixth of the light on their own account, as from above: see the ground)
             if (body.atmosphere)
             {
@@ -1505,7 +1659,7 @@ namespace NaturalLight
         }
 
         /// <summary>(For the development build: what it is doing, as the page says it.)</summary>
-        public static string Report() => running != null ? running.report + (EngineLamps.Report.Length > 0 ? "  " + EngineLamps.Report : "") + (Floodlights.Report.Length > 0 ? "  " + Floodlights.Report : "") + (RunwayLamps.Report.Length > 0 ? "  " + RunwayLamps.Report : "") + (Surroundings.Report.Length > 0 ? "  " + Surroundings.Report : "") + (SunShafts.Report.Length > 0 ? "  " + SunShafts.Report : "") + (WeatherVeil.Report.Length > 0 ? "  " + WeatherVeil.Report : "") + (LitSmoke.Report.Length > 0 ? "  " + LitSmoke.Report : "") + (FilmLook.Report.Length > 0 ? "  " + FilmLook.Report : "") : "not running";
+        public static string Report() => running != null ? running.report + (EngineLamps.Report.Length > 0 ? "  " + EngineLamps.Report : "") + (Floodlights.Report.Length > 0 ? "  " + Floodlights.Report : "") + (RunwayLamps.Report.Length > 0 ? "  " + RunwayLamps.Report : "") + (Surroundings.Report.Length > 0 ? "  " + Surroundings.Report : "") + (SunShafts.Report.Length > 0 ? "  " + SunShafts.Report : "") + (WeatherVeil.Report.Length > 0 ? "  " + WeatherVeil.Report : "") + (LitSmoke.Report.Length > 0 ? "  " + LitSmoke.Report : "") + (FilmLook.Report.Length > 0 ? "  " + FilmLook.Report : "") + (FarLights.Report.Length > 0 ? "  " + FarLights.Report : "") + (Visors.Report.Length > 0 ? "  " + Visors.Report : "") : "not running";
 
         /// <summary>(For the development build: the ground's colour at a few known places on the planet the craft is at, to check the map is read the right way round.)</summary>
         public static string Places()

@@ -23,8 +23,10 @@ For Kerbal Space Program 1.12.x. **Needs [Keystone](https://github.com/IshiakiZ/
   night, Kerbin over the Mun. What stands near the craft shades it and lights it.
 * **By night:** engines light the craft and the ground, launch sites have floodlights and runway lamps, and the space
   centre's windows throw their light on the ground.
-* **Shafts of sunlight** round whatever stands in front of the sun, a deep sky of nebulae and coloured stars, and a
-  cabin and a ground crew lit by where they are.
+* **Shafts of sunlight** round whatever stands in front of the sun, a deep sky of nebulae and coloured stars, and a cabin
+  and a ground crew lit by where they are.
+* **The night sky and visors** (0.13.0): the planets and far craft as points of light, stars that come out at dusk as they
+  really do, and visors that mirror the world round the kerbal.
 * **Weather in the light,** with Natural Weather: dim under cloud, the distance veiled by rain, fog and dust.
 * **Eclipses and cloud tops** (0.12.0): another world before the sun dims the day (the Mun over Kerbin; Kerbin's copper shadow at
   the Mun); over a cloud deck a craft is lit from below by the bright tops; a craft's lamps show their beams in fog and rain;
@@ -50,8 +52,8 @@ turned down or off by itself. [What each one does](https://github.com/IshiakiZ/k
 
 ## Works on
 
-Mac: tried. Windows 11 (Direct3D 11 and OpenGL): 0.10.2 tried; this version run on both on 2026-10-20 (its shaders loaded, on through
-every look of that day's checks), its own looks not tried there. Linux: never run.
+Mac: tried. Windows 11 (Direct3D 11 and OpenGL): 0.10.2 tried; 0.12.0 run on both on 2026-10-20; 0.13.0's far worlds as points of light,
+the stars at dusk and the visors tried on both (2026-10-24), beside Parallax too; its deep sky's new remnant, the Mac only. Linux: never run.
 
 **More:** [the long description](https://github.com/IshiakiZ/ksp-natural-light/wiki/The-long-description) (everything in full, more
 pictures, and what was tried on each system) and the rest of the [wiki](https://github.com/IshiakiZ/ksp-natural-light/wiki).

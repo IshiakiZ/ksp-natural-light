@@ -452,8 +452,8 @@ namespace NaturalLight
         float glaring;                          // how much of the view (the sun left out) is much brighter than white, 0 to 1
         float middling;                         // the brightness of the middle dot of the view, were they put in order: the view's, and not that of a flame in it
 
-        static Color starsWere;
-        static bool starsKept;
+        internal static Color starsWere;
+        internal static bool starsKept;
         float stars = 1f;
 
         /// <summary>

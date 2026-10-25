@@ -71,7 +71,7 @@ namespace NaturalLight
         }
 
         /// <summary>How much of a disc of angular radius rs a disc of radius rb whose middle is `apart` from its own covers (both small: taken as flat).</summary>
-        static float Shared(double rs, double rb, double apart)
+        internal static float Shared(double rs, double rb, double apart)
         {
             if (apart >= rs + rb) return 0f;
             if (apart <= Math.Abs(rb - rs)) return rb >= rs ? 1f : (float)(rb * rb / (rs * rs));
