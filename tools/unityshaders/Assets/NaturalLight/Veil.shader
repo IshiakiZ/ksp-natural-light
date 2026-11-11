@@ -101,41 +101,61 @@ Shader "NaturalLight/Veil"
             // is behind shows and how much of the weather's own light. Its light is the light all round (the sky's and the ground's, as
             // the mod has it), and more towards the sun where the sun is out, since drops, flakes and dust all throw light forward.
 
-            // How much weather lies along so many metres of a line that climbs mu a metre, where the weather thins out by e every
-            // "soft" metres of height, counted in metres of it as thick as it is at the line's start.
-            float thinning(float len, float mu, float soft)
-            {
-                float k = len * mu / soft;
-                return abs(k) < 0.001 ? len * (1.0 - 0.5 * k) : soft / mu * (1.0 - exp(-k));
-            }
-
-            // The same along a line that starts "top" metres under the weather's top, from a camera above it (top below nothing),
-            // and stays above it: counted in metres of the weather as thick as it is under its top. (Once written as how thick the
-            // weather is where the camera is, times thinning(): from a few hundred metres above a shallow fog the first is too small
-            // for the card and comes out nothing, the second too large and comes out infinite, and nothing times infinite is not a
-            // number. The ground and the sea under the camera, and everything drawn in front of them, came out black. Here each
-            // power of e is of a height above the top, and is at most 1.)
-            float thinningAbove(float top, float len, float mu, float soft)
-            {
-                float k = len * mu / soft;
-                float here = exp(top / soft);
-                return abs(k) < 0.001 ? here * len * (1.0 - 0.5 * k) : soft / mu * (here - exp((top - len * mu) / soft));
-            }
-
-            // The weather along a stretch of line that lies above the weather's top, from a to b metres out: the line's height over the
-            // camera after s metres is mu s + s^2 / 2R on a round world, so the stretch is taken in four, each with its own height over
-            // the top and its own climb, and counted in metres of the weather as thick as it is under its top.
+            // The weather along a stretch of line that lies above the weather's top, from a to b metres out, counted in metres of the
+            // weather as thick as it is under its top. On a round world the line's height over the camera after s metres is
+            // mu s + s^2 / 2R, lowest at s = -mu R. The stretch is cut in six from the end that lowest point is at, or in six each side
+            // of it where it lies inside the stretch; the cuts at the squares of sixths, bunched towards it, where the line's height over
+            // the top grows as the square of the distance and the weather thins fastest. Each piece is taken straight between the line's
+            // own heights over the top at its two ends, both at least 0, and the weather summed along it exactly. The line curves up
+            // away from the top between them, so a piece lies a little above it, never under the top, and the sum comes out a little
+            // short, never over: against a fine sum along the curved line, over 2394 lines (the camera 20 m to 2 km over the top, or in
+            // the weather; the weather thinning out in 3 to 200 m above its top; looking from a little up to six degrees down, and just
+            // over the angle at which the line touches the top; 300 m to 60 km), what the weather lets through is out by 0.046 at most,
+            // and by more than 0.02 in 39. (Three each side, as first written, it was out by 0.149, and a straight line ran across the
+            // picture at eye level: level, the stretch is all on one side and had six pieces, a hair below it three, 0.205 of the light
+            // let through against 0.219 in haze from 50 m over its top; 0.0035 with six each side. Found by review, 2026-10-25.)
+            // (Twice wrong before that, 2026-10-25: found by review on the PC and the Mac. Written as how thick the weather is at a piece's
+            // start times how much lies along it, a piece falling from a kilometre or two over a shallow fog had the first come out
+            // nothing and the second infinite, and nothing times infinite is not a number: the ground and the sea a little below level
+            // from a plane over a fog came out black. So every power of e here is of a height above the top, at least 0, so at most 1,
+            // as thinningAbove() once had it for a flat world. And the pieces ran along the line's tangent at their start, which falls
+            // under the curved line by len^2 / 2R, 190 m on a 15 km piece: from 300 m over a fog looking a degree down at a hill 60 km
+            // off, the line passing 180 m over the fog's top all the way, 600 m of fog were counted; sixteen of the 614 lines were out
+            // by more than 0.1, some by all of it.)
             float above(float a, float b, float mu, float top, float soft, float R)
             {
-                float sum = 0.0, len = max(b - a, 0.0) * 0.25;
-                { [loop] for (int i = 0; i < 4; i++)
+                float low = clamp(-mu * R, a, b);
+                bool both = low > a && low < b;
+                float hLow = max(mu * low + low * low / (2.0 * R) - top, 0.0), eLow = exp(-hLow / soft);
+                float sum = 0.0, sWas = low, hWas = hLow, eWas = eLow;
+                { [loop] for (int i = 1; i <= 12; i++)
                 {
-                    float s = a + len * float(i);
-                    float over = mu * s + s * s / (2.0 * R) - top;
-                    sum += exp(-max(over, 0.0) / soft) * thinning(len, mu + s / R, soft);
+                    float to, t;
+                    if (both)
+                    {
+                        to = i <= 6 ? a : b;
+                        t = float(i <= 6 ? i : i - 6) / 6.0;
+                        if (i == 7) { sWas = low; hWas = hLow; eWas = eLow; }
+                    }
+                    else
+                    {
+                        if (i > 6) break;
+                        to = low <= a ? b : a;
+                        t = float(i) / 6.0;
+                    }
+                    float s = low + (to - low) * t * t;
+                    float h = max(mu * s + s * s / (2.0 * R) - top, 0.0);
+                    float e = exp(-h / soft);
+                    float len = abs(s - sWas);
+                    float k = (h - hWas) / soft;
+                    sum += abs(k) < 0.001 ? eWas * len * (1.0 - 0.5 * k) : len * (eWas - e) / k;
+                    sWas = s; hWas = h; eWas = e;
                 } }
                 return sum;
             }
+
+            // Interleaved gradient noise (Jimenez 2014): 0 to 1, a different value at each pixel of the screen, the same every frame.
+            float dither(float2 p) { return frac(52.9829189 * frac(dot(p, float2(0.06711056, 0.00583715)))); }
 
             float4 frag(v2f IN) : SV_Target
             {
@@ -212,6 +232,9 @@ Shader "NaturalLight/Veil"
                 // by how high the sun stands: Veil.cs.)
                 colour += _VeilSunColour.rgb * (3.0 * _VeilSunColour.a * inLayer / max(tau, 1e-3));
                 // (drawn over what is there: the weather's light added by as much as there is of it, and what is behind kept by as much as shows)
+                // (dithered by half a level of 255 each way, by how much there is of it, fixed to the screen: a thick veil's fall to the sky
+                // came out in rings a level apart (the side-by-side's A8). Moved off the clouds' own pattern, so the two do not add up.)
+                colour += (dither(FragCoord(IN.pos).xy + float2(5.0, 3.0)) - 0.5) / 255.0;
                 result = float4(colour * veiled, veiled);
                 return result;
             }

@@ -62,6 +62,7 @@ namespace NaturalLight
 
         float found = float.NaN, filled;    // how bright the view was last found to be (as light), and how much of it was not black
         float eye;                          // how far the eye is open by now, in stops
+        float brighterSince = float.NaN;    // since when the view has wanted the eye closed further than it is (unscaled time)
         static int badReadings;             // how often a reading or the eye itself was not a number (see Meter), since the game began
         float nextRead;
 
@@ -87,6 +88,10 @@ namespace NaturalLight
             if (clean != null) Destroy(clean);
             if (sheet != null) Destroy(sheet);
             clean = null; sheet = null;
+            // (and the two reads' places in Volumetric Explosions' library given up: there are eight, and this is made anew each
+            // scene, so that two were kept a scene, and after a few scenes the picture was read at once again; found 2026-10-25)
+            lower?.Free(); upper?.Free();
+            lower = upper = null;
         }
 
         /// <summary>Have the camera that draws last of the scene's own shrink its picture, before anything else is done to it, to something small enough to read.</summary>
@@ -544,6 +549,9 @@ namespace NaturalLight
         static bool cloudsBlind;
         /// <summary>(For the development build: the eye blind to the weather's dimming of the light, as before 0.10.0, and back: for pictures of before and after.)</summary>
         public static string CloudsBlind() { cloudsBlind = !cloudsBlind; return cloudsBlind ? "the eye blind to the clouds, as in 0.9.0" : "the eye opens for the clouds"; }
+        static bool cloudEyeAsBefore;
+        /// <summary>(For the development build: the eye under cloud opened until the whole view is four tenths of white, as before 2026-10-25, and back.)</summary>
+        public static string CloudEyeAsBefore() { cloudEyeAsBefore = !cloudEyeAsBefore; return cloudEyeAsBefore ? "the eye under cloud as before 2026-10-25" : "the eye under cloud by how dark the view is"; }
 #endif
 
         /// <summary>
@@ -646,7 +654,8 @@ namespace NaturalLight
                 // a little over three stops (nine times the light). But no further than the brightest part of the view can
                 // bear: with a floodlit rocket in sight, or a sunlit one against black space, it stays shut, and everything
                 // else stays as dark as it is. That is why there are no stars in a photograph of a sunlit spacecraft.
-                float open = Mathf.Max(0f, Mathf.Log(Middle / Mathf.Max(view, 1e-6f), 2f)) * 0.6f * follows;
+                float dark = Mathf.Max(0f, Mathf.Log(Middle / Mathf.Max(view, 1e-6f), 2f)) * 0.6f * follows;
+                float open = dark;
                 // (At the space centre, seen from above, the buildings have to be found to be clicked on, whatever lit windows
                 // and floodlights are in sight: there the bright things hold it back much less.)
                 // (And in a cockpit the windows are not a small bright thing in the dark but a good share of the view: a camera inside a
@@ -654,7 +663,7 @@ namespace NaturalLight
                 // by day looks. So there they may come to four times what is borne outside, which the film's shoulder rolls over into a
                 // pale glow with the view still in it.)
                 open = Mathf.Min(open, Mathf.Log((!HighLogic.LoadedSceneIsFlight ? 2.2f : InCockpit(metered) ? CockpitBears : 0.35f) / Mathf.Max(top, 1e-6f), 2f));
-                open = Mathf.Clamp(open, 0f, 3.2f * Mathf.Min(follows, 1.25f));
+                open = Mathf.Clamp(open, 0f, Daylight.Of(Daylight.EyeMost, 3.2f) * Mathf.Min(follows, 1.25f));
                 // In the light it closes: by two thirds of how bright what is in view is, and further for a view full of
                 // something much brighter than white (a flame from close to), until that is only twice white or so. By how
                 // full: all the way where a twenty-fifth of the view or more is that bright, and less for less, so that a
@@ -670,28 +679,37 @@ namespace NaturalLight
                 close = Mathf.Max(close, Mathf.Lerp(-2.5f, -0.6f, day));
                 wanted = open > 0f ? open : close;
                 // Under cloud, though, there is a tenth to a quarter of a clear day's light (less in rain), and a camera's meter opens
-                // two or three stops for it, as an eye does, whatever the sky in view: an overcast sky burns out white in every
-                // photograph taken under one. So by day it opens at least by six tenths of the stops the weather takes from the light
-                // on the ground (Daylight.Clouded; the same share as for a dark view, above), the bright sky notwithstanding. Level
-                // ground then shows about half a clear day's light under an overcast and a third in rain; a scene with much that is
-                // upright, or in shadow on a sunny day (the pad), comes out about as bright as in sunshine, and flat: as a camera's
-                // meter makes it. (At three quarters, tried first, the overcast pad came out a sixth brighter than the sunny one.)
+                // for it, as an eye does, whatever the sky in view: an overcast sky goes pale in every photograph taken under one. So
+                // by day it opens by six tenths of how dark the view is, as for any dark view above, but the bright sky does not hold
+                // it back: the cloud overhead is the brightest thing in sight, and is let go pale. And never further than six tenths of
+                // the stops the weather takes from the light on the ground (Daylight.Clouded): under one cloud's shadow on a day of
+                // sunlit heaps, or under a storm with sunlit towers round it, hardly anything (opened by the weather alone, "the
+                // bright sky notwithstanding", every heap in sight went to plain white whenever a cloud's shadow crossed the pad).
+                // (Until 2026-10-25 it opened by six tenths of the weather's stops until the whole view came to four tenths of white,
+                // past the middle, and the glow's threshold was given in the wrong measure (Keystone's TufxFilm): an overcast, a rain
+                // and a storm overhead came out near white, 220-236 of 255. With the glow mended, that opening still made the storm
+                // seen from the runway brighter than a fair day from the same place, 173 against 127: the picture loses less light
+                // than the weather says, its sky and its haze being bright, and it is the picture the eye answers.)
+                float underCloud = dark;
 #if DEV
+                if (cloudEyeAsBefore) underCloud = Mathf.Max(0f, Mathf.Log(0.42f / Mathf.Max(view, 1e-6f), 2f));
                 if (!cloudsBlind)
 #endif
-                // (But no further than the view can bear: until the whole of it, clouds and sky and all, comes to about four tenths
-                // of white. Under an even overcast that is the two stops and more above; under one cloud's shadow on a day of
-                // sunlit heaps, or under a storm with sunlit towers round it, hardly anything: opened by the weather alone, "the
-                // bright sky notwithstanding", every heap in sight went to plain white whenever a cloud's shadow crossed the pad.)
-                wanted = Mathf.Max(wanted, Mathf.Min(Mathf.Min(0.6f * Daylight.Clouded * follows, Mathf.Max(0f, Mathf.Log(0.42f / Mathf.Max(view, 1e-6f), 2f))), 3.2f * Mathf.Min(follows, 1.25f)));
+                wanted = Mathf.Max(wanted, Mathf.Min(Mathf.Min(0.6f * Daylight.Clouded * follows, underCloud), 3.2f * Mathf.Min(follows, 1.25f)));
             }
             // (A reading that is not a number, or an infinite one, leaves the eye where it is; and an eye that has become one is opened
             // as at the start. Taken in without this, one such reading made the eye not a number, and every picture after it black
             // for good: the ground seen after the hurricane from 200 km, the evening of 2026-10-18, with the clouds switched off and
             // the view cut to the map and back.)
             if (float.IsNaN(wanted) || float.IsInfinity(wanted)) { wanted = float.IsNaN(eye) || float.IsInfinity(eye) ? 0f : eye; badReadings++; }
+            // (A camera's meter, as an eye, takes a moment before it closes for a brighter view: a flash of lightning, which lights the
+            // whole scene for a few tenths of a second, is over before it does, and the picture after it is as it was before. Answered
+            // at once, the eye shut a stop and a third in each of the flashes under Blackrack's storms, and the scene stood dark for
+            // three seconds after each while it opened again: found 2026-11-03.)
+            if (wanted < eye) { if (float.IsNaN(brighterSince)) brighterSince = Time.unscaledTime; if (Time.unscaledTime - brighterSince < 0.6f) wanted = eye; }
+            else brighterSince = float.NaN;
             // (it closes fast and opens slowly, as eyes do: coming out of the light it is some seconds before the dark shows anything)
-            float rate = wanted < eye ? 3f : 0.45f;
+            float rate = wanted < eye ? Daylight.Of(Daylight.EyeCloses, 3f) : Daylight.Of(Daylight.EyeOpens, 0.45f);
             eye = Mathf.MoveTowards(eye, wanted, rate * Mathf.Min(Time.unscaledDeltaTime, 0.1f));
             if (float.IsNaN(eye) || float.IsInfinity(eye)) { eye = 0f; badReadings++; }
             Opened = eye;

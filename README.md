@@ -41,7 +41,8 @@ Copy the `NaturalLight` folder from the download into your KSP's `GameData`, bes
 ## Settings
 
 In the Keystone window: the keystone button on the game's toolbar, or Alt-K (Option-K on a Mac). Each part can be
-turned down or off by itself. [What each one does](https://github.com/IshiakiZ/ksp-natural-light/wiki/Settings).
+turned down or off by itself. With Keystone 0.11.0, three finer details in its Advanced view: how fast the camera's eye
+opens in the dark and closes in the light, and how far it may open. [What each one does](https://github.com/IshiakiZ/ksp-natural-light/wiki/Settings).
 
 ## Good to know
 

@@ -84,6 +84,40 @@ namespace NaturalLight
         public static string NearC() { near = new Vector4(0.55f, 2.5f, 1.5f, 14f); return Near(); }
         public static string NearD() { near = new Vector4(0.45f, 1.9f, 1.5f, 12f); return Near(); }
 
+        /// <summary>Everything drawn that is big (wider than so many metres, 30 if not said) within six kilometres of the flight
+        /// camera: where it is from the camera (east, north, up), how big, its layer, what draws it. For finding what a thing seen
+        /// in the picture is (2026-11-05: a ring, a column and a kerbal's head the size of buildings round the runway).</summary>
+        public static string Bigs(string arg)
+        {
+            float least = 30f;
+            float.TryParse(arg, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out least);
+            if (least <= 0f) least = 30f;
+            Camera cam = FlightCamera.fetch != null ? FlightCamera.fetch.mainCamera : Camera.main;
+            if (cam == null) return "no camera";
+            Vector3 at = cam.transform.position;
+            Vector3 up = FlightGlobals.ActiveVessel != null ? (Vector3)FlightGlobals.ActiveVessel.upAxis : Vector3.up;
+            Vector3 north = FlightGlobals.ActiveVessel != null ? Vector3.ProjectOnPlane((Vector3)FlightGlobals.ActiveVessel.mainBody.transform.up, up).normalized : Vector3.forward;
+            Vector3 east = Vector3.Cross(up, north);
+            var say = new StringBuilder();
+            int n = 0;
+            foreach (Renderer r in Object.FindObjectsOfType<Renderer>())
+            {
+                if (!r.enabled || !r.gameObject.activeInHierarchy) continue;
+                Bounds b = r.bounds;
+                float size = 2f * b.extents.magnitude;
+                Vector3 d = b.center - at;
+                if (size < least || d.magnitude > 6000f || d.magnitude < 1e-3f && size > 1e5f) continue;
+                if ((cam.cullingMask & (1 << r.gameObject.layer)) == 0) continue;
+                if (++n > 60) { say.Append("...\n"); break; }
+                Material m = r.sharedMaterial;
+                say.Append(Path(r.transform)).Append(" (").Append(r.GetType().Name).Append(", layer ").Append(r.gameObject.layer).Append(") ")
+                   .Append(Vector3.Dot(d, east).ToString("F0")).Append(" E ").Append(Vector3.Dot(d, north).ToString("F0")).Append(" N ").Append(Vector3.Dot(d, up).ToString("F0")).Append(" up, ")
+                   .Append(size.ToString("F0")).Append(" m across, scale ").Append(r.transform.lossyScale.ToString("F2")).Append(", ")
+                   .Append(m != null ? m.name + " / " + (m.shader != null ? m.shader.name : "none") + " / " + (m.mainTexture != null ? m.mainTexture.name : "no texture") : "no material").Append("\n");
+            }
+            return say.Length > 0 ? say.ToString() : "nothing so big";
+        }
+
         /// <summary>The cameras of the scene, what is under the rocket, and the lightmaps.</summary>
         public static string Floor()
         {

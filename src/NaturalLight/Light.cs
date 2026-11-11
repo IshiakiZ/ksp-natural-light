@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 
 #if !DEV
 [assembly: KSPAssembly("NaturalLight", 0, 10)]
-[assembly: KSPAssemblyDependency("Keystone", 0, 7)]
+[assembly: KSPAssemblyDependency("Keystone", 0, 11)]
 #endif
 
 namespace NaturalLight
@@ -46,7 +46,7 @@ namespace NaturalLight
     [KSPAddon(KSPAddon.Startup.FlightAndKSC, false)]
     public sealed class Daylight : MonoBehaviour
     {
-        public const string Version = "0.13.0";
+        public const string Version = "0.14.0";
 
         static Mod mod;
         /// <summary>The mod's page in Keystone's window: for the parts of the mod that have something to say on it.</summary>
@@ -63,6 +63,15 @@ namespace NaturalLight
         static readonly Vector3[] sixWays = { Vector3.up, Vector3.down, Vector3.left, Vector3.right, Vector3.forward, Vector3.back };
         static readonly Color[] sixFound = new Color[6];
         public static Slider EngineLight, FloodLight, Beams, Punch, Glow, Eye, Creases, Marks, Grain, WindowLight, SkyGlow, SkySeed, ShaftLight, RunwayLight;
+        // (the page's fine details, in its Advanced view: each as installed does what the mod did before it had them)
+        public static Slider EyeOpens, EyeCloses, EyeMost;
+        public static float Of(Slider slider, float installed) => slider != null ? (float)slider : installed;
+
+        /// <summary>The settings added after Fine(true) are fine details: on the page only in Keystone's Advanced view, until Fine(false).
+        /// (Keystone 0.11.0 has the two views; an older one has neither call, and shows the fine details with the rest.)</summary>
+        static void Fine(bool fine) { try { if (fine) Advanced(mod); else Simple(mod); } catch (Exception) { } }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)] static void Advanced(Mod page) => page.Advanced();
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)] static void Simple(Mod page) => page.Simple();
 
         /// <summary>The colour and strength of sunlight as it reaches the craft: for the other parts of the mod.</summary>
         public static Color Sunlight = Color.white;
@@ -148,19 +157,25 @@ namespace NaturalLight
                 on = mod.Toggle("on", "Natural light", true, "Off: the game's own light again, all of it: one flat grey for whatever the sun does not reach, and no light from engines or at launch sites.");
                 sky = mod.Slider("sky", "Sky light", 1f, 0f, 2.5f, "", 2, "How strongly the sky lights what faces it. Only where there is air, and by day.");
                 ground = mod.Slider("ground", "Ground light", 1f, 0f, 2.5f, "", 2, "How strongly the ground, or the planet below, lights what faces it: in the ground's own colour, and only where the sun is on that ground.");
+                Fine(true);
                 dark = mod.Slider("dark", "Darkest", 0.045f, 0f, 0.25f, "", 3, "The least light there ever is, so that the night side is dark but not black. The game's own flat light is 0.06 in space and 0.24 in air, by night as by day: raise this towards that if nights are too dark to fly in.");
                 rays = mod.Toggle("rays", "Light found by rays", true, "Rays are cast from the craft in every direction, to find what is round it: a hangar wall, a crater's side, an overhang. The sky then lights the craft only from where it can be seen, and whatever the rays find lights it from there, in its own colour, as brightly as the sun and the sky are on it (a second ray, towards the sun, says whether it is in shadow: the craft's own shadow included). Near the ground only.");
                 thrown = mod.Slider("thrown", "Light thrown back", 1f, 0f, 2.5f, "", 2, "How strongly what the rays find lights the craft.");
+                Fine(false);
                 inside = mod.Toggle("inside", "Inside the craft too", true, "The cockpit, and the crew's portraits, lit from its windows by whatever they look at (the sky, the planet below, a sunset), with the light the walls throw back, instead of by the game's one flat grey; the game's own sun in the cabin dimmed by the clouds and reddened at sunset as the sun outside is. In a planet's shadow the crew sit in a dim cabin, as the craft they are in sits in the dark.");
                 mod.Heading("The sun");
+                Fine(true);
                 through = mod.Choice("through", "Sun through air", 0, new[] { "if nothing else does", "always", "never" }, "A low sun shines through far more air than a high one, and comes out dimmer and redder (or, through Duna's dust, bluer). Scatterer does this already where it is installed and set to: 'if nothing else does' leaves it to Scatterer then.");
+                Fine(false);
                 Shafts = mod.Toggle("shafts", "Shafts of sunlight", true, "With the sun in view and something in front of it, a tower, a rocket, the edge of a cloud, its light comes round in shafts through the air. Only where there is air. (A shader of the mod's own, packed for the game's OpenGL on a Mac or Linux and built for Direct3D on Windows.)");
                 ShaftLight = mod.Slider("shaftlight", "How strong", 1f, 0f, 3f, "", 2, "How strongly the shafts show.");
                 try { Faster(mod); } catch (Exception) { }     // (what "every mod set for speed" sets here; not with a Keystone older than 0.9.0)
                 Veil = mod.Toggle("veil", "Rain, snow, fog and dust in the air", true, "With a weather mod installed (Natural Weather), what is in the air veils the distance as it does: the far side of the pad greys out in rain, the hills whiten in snow, fog swallows everything past a hundred metres, a dust storm on Duna is an ochre murk. As far as the weather says one can see, lit as the sky and the ground light it, and brighter towards the sun where the sun is out. (A shader of the mod's own, packed for the game's OpenGL on a Mac or Linux and built for Direct3D on Windows.)");
                 golden = mod.Slider("golden", "Low sun", 0.7f, 0f, 1f, "", 2, "A sinking sun is dimmed by the air, and the eye (like any camera) opens up to keep pace: so the last hour of sunlight is still strong, in its evening colour, and throws long clear shadows, instead of fading into grey. 0: no keeping pace, the sun simply dims.");
                 shadows = mod.Slider("shadows", "Depth of shadows", 1f, 0f, 1f, "", 2, "The game lets a quarter of the sunlight through every shadow, to keep its flat grey light from looking dead. With the sky and the ground lighting what is in shadow that is not needed: at 1 no sunlight comes through, and shadows are as dark (and, under a blue sky, as blue) as they are. 0: as the game has them.");
+                Fine(true);
                 fine = mod.Toggle("fine", "Finer shadows up close", true, "The game keeps its finest shadows for whatever is near the camera, and with the camera drawn in close moves that fineness in with it: but only on Windows' Direct3D. This does the same on a Mac and on Linux, so that one part of a craft throws a clean shadow on another. (Left alone where Scatterer is set to handle shadows itself.)");
+                Fine(false);
                 mod.Heading("Other worlds");
                 worlds = mod.Slider("worlds", "Light of other worlds", 1f, 0f, 3f, "", 2, "Every world in the sky throws back sunlight: the Mun over Kerbin by night, Kerbin over the Mun, Jool over its moons. Each lights the craft from its own side, in its own colour, by how much of it is lit and how large it stands.");
                 eyes = mod.Slider("eyes", "Night eyes", 1f, 0f, 2f, "", 2, "In the dark the eye opens up, and moonlight that is a hundred-thousandth of daylight is enough to see by. How far it does so here: 0 shows other worlds' light as weak as it truly is (next to nothing), 1 makes a full Mun enough to fly by.");
@@ -189,13 +204,20 @@ namespace NaturalLight
                 mod.Heading("Deep sky");
                 Deep = mod.Toggle("deep", "Nebulae and a deeper sky", true, "Nebulae, a faint glow along the band of the galaxy, a few far galaxies and some hundreds of brighter coloured stars, laid over the game's own sky of stars. Space stays mostly black. It is all worked out from noise when the game starts (about a second, on the side), and sits on the band of whatever sky is installed.");
                 SkyGlow = mod.Slider("skyglow", "How bright", 1f, 0f, 3f, "", 2, "How strongly the deep sky shows.");
+                Fine(true);
                 SkySeed = mod.Slider("skyseed", "Which sky", 7f, 1f, 60f, "", 0, "Another number, another sky: different nebulae in different places.");
+                Fine(false);
                 Dusk = mod.Toggle("dusk", "Stars come out at dusk", true, "The game hides its stars in air until the sun is far below the horizon and then lets them all out at once, and keeps them dim all night. Here they come out as the sky darkens, the brightest a few minutes after sunset and the faintest at full night, and at night they are as bright as clean air lets them be. Sooner in thin air (Duna), later in thick (Eve). Far worlds and craft come out with them.");
                 mod.Heading("Film");
                 Filmed = mod.Toggle("film", "Film look", true, "The picture developed as a film camera's would be. The game cuts off flat whatever is brighter than white; film lets it roll over into a glow. Contrast is stronger, with the colours left as the light makes them; creases and the places where things meet are darker, and the camera's eye opens and closes with how bright the view is. It is done by the TUFX mod's post-processing, and does nothing where TUFX is not installed.");
                 Punch = mod.Slider("punch", "Contrast and colour", 1f, 0f, 2f, "", 2, "How strong the film's contrast is. At 1 the colours are left as the light makes them; above 1 colour is added as well, for a stronger look. 0: the film curve alone.");
                 Glow = mod.Slider("glow", "Glow", 1f, 0f, 2f, "", 2, "The glow round whatever is very bright: a flame, a lamp, sunlight on white paint.");
                 Eye = mod.Slider("eye", "The camera's eye", 1f, 0f, 2f, "", 2, "The exposure follows the view, as an eye or a camera does. In the dark it opens, slowly, and what could not be seen can be (up to three stops, nine times the light). In the light it closes. And it opens no further than the brightest thing in view can bear: with a floodlit rocket or a sunlit planet in sight, everything dark stays dark, stars included. Under cloud (with a weather mod) it opens for the light the clouds take, two or three stops, as a camera's meter does however bright the sky. 0: one exposure always.");
+                Fine(true);
+                EyeOpens = mod.Slider("eyeopens", "The eye opens by", 0.45f, 0.05f, 3f, " stops a second", 2, "How fast the camera's eye opens in the dark: slowly, as eyes do, coming out of the light.");
+                EyeCloses = mod.Slider("eyecloses", "The eye closes by", 3f, 0.3f, 12f, " stops a second", 1, "How fast the camera's eye closes down in the light.");
+                EyeMost = mod.Slider("eyemost", "Opened at most by", 3.2f, 0.5f, 6f, " stops", 1, "How far the camera's eye may open in the dark at the most (3 stops is eight times the light), with the camera's eye at 1.");
+                Fine(false);
                 Grain = mod.Slider("grain", "Grain in the dark", 1f, 0f, 4f, "", 2, "A picture pushed to see in the dark is a little grainy, as film pushed that far is. It is faint as installed. 0: none.");
                 Creases = mod.Slider("creases", "Creases", 1f, 0f, 2f, "", 2, "The darkening of creases and of where one thing meets another, which makes a craft look solid. 0: none of this mod's (the TUFX profile's own, if it has any, stays).");
                 Marks = mod.Slider("marks", "Lens marks", 1f, 0f, 2f, "", 2, "Slightly darker corners and a trace of colour fringing towards them, as every real lens has.");
@@ -1325,6 +1347,32 @@ namespace NaturalLight
         /// <summary>Whether a camera draws the inside of a cockpit: the view from a seat, and the crew's portraits (which are small pictures of the same insides).</summary>
         static bool Inside(Camera cam) => (cam.cullingMask & ((1 << 16) | (1 << 20))) != 0 && (cam.cullingMask & (1 << 15)) == 0;
 
+        // ---- what is newer in Keystone than the Keystone this mod asks for: a lightning flash's light as the weather mod lights
+        // the scene with it (Weather.FlashLight, after 0.10.0), kept in a method of its own and guarded, so that with an older
+        // Keystone the cabin is lit as before, not stopped.
+        static bool flashMissing;
+        // (how much of a flash's light outside the cabin is given, see where it is used)
+        const float FlashIn = 0.2f;
+
+        /// <summary>A lightning flash's light at this moment (as light), the way it comes from in the scene, and how much of it
+        /// comes from all round as well: false where there is none (none said this frame, or a Keystone older than it).</summary>
+        static bool Flash(out Color light, out Vector3 from, out float round)
+        {
+            light = Color.black; from = Vector3.up; round = 0f;
+            if (flashMissing) return false;
+            try { return AskFlash(out light, out from, out round); }
+            catch (Exception) { flashMissing = true; return false; }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static bool AskFlash(out Color light, out Vector3 from, out float round)
+        {
+            light = Keystone.Weather.FlashLight;
+            from = Keystone.Weather.FlashLightFrom;
+            round = Keystone.Weather.FlashLightRound;
+            return Keystone.Weather.FlashLightFrame == Time.frameCount && (light.r > 0f || light.g > 0f || light.b > 0f);
+        }
+
         SphericalHarmonicsL2 insideProbe;
         bool haveInside;
         static readonly Vector3[] six = { Vector3.up, Vector3.down, Vector3.left, Vector3.right, Vector3.forward, Vector3.back };
@@ -1378,10 +1426,16 @@ namespace NaturalLight
             cockpitLevel = Mathf.MoveTowards(cockpitLevel, cockpit, 0.5f * Mathf.Min(Time.unscaledDeltaTime, 0.1f));
             if (Time.realtimeSinceStartup - cabinLooked > 2f)
             {
+#if DEV
+                long began = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
                 cabinLooked = Time.realtimeSinceStartup;
                 cabin.Clear();
                 foreach (Light l in FindObjectsOfType<Light>())
                     if (l != null && l.type != LightType.Directional && (l.cullingMask & ((1 << 16) | (1 << 20))) != 0 && (l.cullingMask & (1 << 15)) == 0 && !l.name.StartsWith("Natural Light")) cabin.Add(l);
+#if DEV
+                Searched("the cabin's lamps", began);
+#endif
             }
             SetCabin(cabinLevel);
         }
@@ -1402,6 +1456,24 @@ namespace NaturalLight
         }
 
         static bool CockpitView(Camera cam) => InternalCamera.Instance != null && cam.gameObject == InternalCamera.Instance.gameObject;
+
+#if DEV
+        // (for the development build: when the two-second searches ran, inside which camera's drawing if any, and what each cost)
+        static readonly List<string> searches = new List<string>();
+        static void Searched(string what, long began)
+        {
+            double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - began) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            if (searches.Count < 200) searches.Add("f" + Time.frameCount + " " + Time.unscaledTime.ToString("F3") + " " + what + ": " + ms.ToString("F2") + " ms" + (Camera.current != null ? ", in " + Camera.current.name + "'s drawing" : ""));
+        }
+
+        /// <summary>For the development build: the two-second searches since the last call (the cockpit's sun, the cabin's lamps), and cleared.</summary>
+        public static string Searches()
+        {
+            string said = string.Join("\n", searches.ToArray());
+            searches.Clear();
+            return said;
+        }
+#endif
 
         void CabinBack()
         {
@@ -1440,11 +1512,22 @@ namespace NaturalLight
         void CabinSun()
         {
             if (drawnStrength < 0f) return;
-            if (Time.realtimeSinceStartup - cabinSunsLooked > 2f)
+            // (looked for again only while there is none, or one has gone: the game's is a part of the flight scene, there from its start
+            // to its end. Looked for every two seconds until 2026-10-28, here, in the drawing of the first cockpit camera to draw after
+            // them: in flight, a crew portrait's. A search of every object there is, 3.6 to 7.1 ms on the PC: the portrait's picture went
+            // from half a millisecond to four or more, and Smooth Portraits, which keeps its pictures to a share of the frame, took none
+            // for the next three to seventeen frames, every two seconds)
+            if ((cabinSuns.Count == 0 || cabinSuns.Exists(s => s == null)) && Time.realtimeSinceStartup - cabinSunsLooked > 2f)
             {
+#if DEV
+                long began = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
                 cabinSunsLooked = Time.realtimeSinceStartup;
                 cabinSuns.Clear();
                 cabinSuns.AddRange(FindObjectsOfType<IVASun>());
+#if DEV
+                Searched("the cockpit's sun", began);
+#endif
             }
             foreach (IVASun s in cabinSuns)
             {
@@ -1515,7 +1598,23 @@ namespace NaturalLight
 #if DEV
                 windows = !oldCabin;
 #endif
-                RenderSettings.ambientProbe = windows && Cockpits.Probe(cam, probe, CabinGlow, drawnStrength > 0f ? drawnColour * drawnStrength : Color.black, out SphericalHarmonicsL2 lit) ? lit : insideProbe;
+                // (The light outside, with a lightning flash's while it lasts, as the weather mod lights the scene with it: the
+                // windows' lamps and the walls' glow take it as they take the sky's. A fifth of it: a flash is a small source, as
+                // the sun is, and through a window it lights the patch it falls on and the rest by what that throws back, where
+                // the lamps stand for a whole sky that bright in the window. By eye from film, 2026-11-10, at night in the Mk1-3
+                // on the pad, looking at the instruments, the picture's lower half 88 of 255 before: with all of it a strike
+                // 3.5 km off raised that by 60, more than daylight does, and the picture washed out; with a fifth by 16, one 1 km
+                // off by 43, one 0.3 km off by 52, and one on the craft itself turns the picture white while it lasts. Before
+                // this a flash lit nothing inside: the four strikes changed no frame by a twentieth of a level. By day, when the
+                // weather mod shows a seventeenth of the flash, the same four raise 102 by 0.6, 2.0, 2.5 and 27.)
+                SphericalHarmonicsL2 outside = probe;
+                if (windows && Flash(out Color flash, out Vector3 flashFrom, out float flashRound))
+                {
+                    flash *= FlashIn;
+                    outside.AddDirectionalLight(flashFrom, flash, 1f);
+                    outside.AddAmbientLight(flash * flashRound);
+                }
+                RenderSettings.ambientProbe = windows && Cockpits.Probe(cam, outside, CabinGlow, drawnStrength > 0f ? drawnColour * drawnStrength : Color.black, out SphericalHarmonicsL2 lit) ? lit : insideProbe;
                 if (windows) CabinSun();
                 // (the cabin's lamps for this camera: the cockpit's own view has its eye; the portraits have none)
                 SetCabin(CockpitView(cam) ? cockpitLevel : cabinLevel);
