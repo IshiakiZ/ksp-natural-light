@@ -13,7 +13,7 @@ eye follows the brightness of the view.
 
 ![The evening sun behind the assembly building, its light coming round in shafts over the pad](src/NaturalLight/img/natural-light-shafts.gif)
 
-For Kerbal Space Program 1.12.x. **Needs [Keystone](https://github.com/IshiakiZ/ksp-keystone) 0.9 or later**, a separate download
+For Kerbal Space Program 1.12.x. **Needs [Keystone](https://github.com/IshiakiZ/ksp-keystone) 0.11 or later**, a separate download
 ([on SpaceDock](https://spacedock.info/mod/4665/Keystone)): this mod does not load without it. The film look needs
 [TUFX](https://github.com/KSPModStewards/TUFX); everything else works without it.
 
