@@ -291,7 +291,7 @@ namespace NaturalLight
                 if (l == null || l.type == LightType.Directional) continue;
                 Vector3 d = l.transform.position - here;
                 if (d.magnitude > 4000f) continue;
-                o.Append(Path(l.transform)).Append(": ").Append(l.type).Append(' ').Append(l.renderMode).Append(l.enabled && l.gameObject.activeInHierarchy ? "" : " (off)").Append(" i ").Append(l.intensity.ToString("F2")).Append(" r ").Append(l.range.ToString("F0"))
+                o.Append(Path(l.transform)).Append(": ").Append(l.type).Append(' ').Append(l.renderMode).Append(l.enabled && l.gameObject.activeInHierarchy ? "" : " (off)").Append(l.cullingMask == 0 ? " (lights nothing)" : "").Append(" i ").Append(l.intensity.ToString("F2")).Append(" r ").Append(l.range.ToString("F0"))
                  .Append(" at ").Append(Vector3.Dot(d, east).ToString("F0")).Append('/').Append(Vector3.Dot(d, north).ToString("F0")).Append('/').Append(Vector3.Dot(d, up).ToString("F0")).Append(" colour ").Append(l.color.ToString("F2")).Append('\n');
                 if (++n > 120) break;
             }

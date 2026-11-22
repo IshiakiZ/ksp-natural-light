@@ -59,6 +59,15 @@ namespace NaturalLight
         float nextLook;
         bool others;
         public static string Report = "";
+        // (the game's own lights in its engines' exhaust, kept dark while this lights the engines, and what each lit before: see Mute)
+        readonly Dictionary<Light, int> muted = new Dictionary<Light, int>();
+        readonly List<Light> inPart = new List<Light>();
+        readonly List<Light> gone = new List<Light>();
+        readonly HashSet<Part> searched = new HashSet<Part>();     // (the parts looked through already: the game makes a part's effects, its lights among them, as it loads the part)
+        static readonly Predicate<Part> Lost = p => p == null;
+#if DEV
+        public static bool TestStockLights;     // (development: the game's own exhaust lights left lit, as until 2026-11-20)
+#endif
 
         /// <summary>A flame that is giving light just now: where, how much and what colour (as light), and how far it carries. For the other parts of the mod.</summary>
         public struct Flame { public Vector3 At; public Color Light; public float Reach; }
@@ -89,6 +98,7 @@ namespace NaturalLight
 
         void OnDestroy()
         {
+            Mute(false);
             foreach (Light lamp in lamps) if (lamp != null) Destroy(lamp.gameObject);
             foreach (Light lamp in soft) if (lamp != null) Destroy(lamp.gameObject);
 #if DEV
@@ -139,9 +149,50 @@ namespace NaturalLight
             return lamp;
         }
 
+        /// <summary>
+        /// (Since 2026-11-20.) The game's own lights in its engines' exhaust (`fx_exhaustLight_blue` and the like: a blue-white spot
+        /// of ten metres under each bell, which Unity draws for every dot or at the corners as it reckons best) are kept dark while
+        /// this mod lights the engines: they are left to light nothing (their culling mask nought), and are given back what they
+        /// lit when it stops. Lit at ignition, eight of them under a Kerbal X, they took the places Unity keeps for lights of the
+        /// cheap kind on what is near, and the floodlights round the pad lost theirs: the floodlights' light on the paving went
+        /// out in one frame at ignition and came back in one frame a second later, when the rocket had risen out of the spots'
+        /// ten metres, the jump at 2.1 s in every night launch filmed (TODO 2026-11-20 04:4x and 05:4x, `lift20_nlengoff`). The
+        /// lamps here do their work, the flame's colour. TestStockLights (development, by StockLights("1")): as until then.
+        /// </summary>
+        void Mute(bool on)
+        {
+            if (!on)
+            {
+                foreach (KeyValuePair<Light, int> kept in muted) if (kept.Key != null) kept.Key.cullingMask = kept.Value;
+                muted.Clear();
+                searched.Clear();
+                return;
+            }
+            // (the lights of parts since gone let go of)
+            foreach (KeyValuePair<Light, int> kept in muted) if (kept.Key == null) gone.Add(kept.Key);
+            foreach (Light l in gone) muted.Remove(l);
+            gone.Clear();
+            searched.RemoveWhere(Lost);
+            // (each part looked through once, not twice a second over again: a craft of many engines would be that work for nothing)
+            foreach (ModuleEngines e in engines)
+            {
+                if (e == null || e.part == null || !searched.Add(e.part)) continue;
+                e.part.GetComponentsInChildren(true, inPart);
+                foreach (Light l in inPart)
+                    if (l != null && !muted.ContainsKey(l) && l.name.StartsWith("fx_exhaustLight", StringComparison.Ordinal)) { muted[l] = l.cullingMask; l.cullingMask = 0; }
+            }
+            inPart.Clear();
+        }
+
         void LateUpdate()
         {
             bool wanted = !others && Daylight.On && Daylight.Engines != null && Daylight.Engines && Daylight.FlightReady && FlightGlobals.ActiveVessel != null && !MapView.MapIsEnabled;
+            // (the game's own exhaust lights dark whenever this lights engines, the map open or not: see Mute)
+            bool mute = !others && Daylight.On && Daylight.Engines != null && Daylight.Engines;
+#if DEV
+            if (TestStockLights) mute = false;
+#endif
+            if (!mute && muted.Count > 0) Mute(false);
             groups.Clear();
             if (wanted)
             {
@@ -161,6 +212,7 @@ namespace NaturalLight
                             foreach (ModuleEngines e in p.FindModulesImplementing<ModuleEngines>()) engines.Add(e);
                         }
                     }
+                    if (mute) Mute(true);
                 }
                 Transform frame = flown.transform;
                 foreach (ModuleEngines e in engines)
@@ -197,6 +249,12 @@ namespace NaturalLight
             }
 
             float strength = Daylight.EngineLight != null ? (float)Daylight.EngineLight : 1f;
+            // (Weaker by day, since 2026-11-17: four tenths in full daylight of what it is at night, as the Engine Flames mod's own
+            // lamps are (its Gain). The game's lights are not reckoned in real amounts: as strong by day as by night, a rocket
+            // leaving its pad at noon bleached the pad and the grass round it yellow-white for a hundred metres, where NASA's
+            // photographs of a launch by daylight show the flame's light on the cloud beside it and the sunlit ground as it was.
+            // A flame that size gives the ground fifty metres off perhaps half what the sun does.)
+            strength *= Mathf.Lerp(1f, 0.4f, Mathf.Clamp01(Daylight.SunUp * 4f + 0.25f));
             float time = Time.time;
             float flicker = 0.9f + 0.2f * Mathf.PerlinNoise(time * 19f, 0.37f) + 0.06f * Mathf.PerlinNoise(time * 57f, 3.1f);
             Vector3 north = FlightGlobals.currentMainBody != null ? (Vector3)FlightGlobals.currentMainBody.transform.up : Vector3.up;
@@ -290,6 +348,13 @@ namespace NaturalLight
         }
 
 #if DEV
+        /// <summary>(For the development build: the game's own exhaust lights left lit ("1"), as until 2026-11-20, or kept dark while this lights the engines ("0"), as now. See Mute.)</summary>
+        public static string StockLights(string on)
+        {
+            TestStockLights = on == "1" || on == "true";
+            return "the game's own exhaust lights " + (TestStockLights ? "left lit, as until 2026-11-20" : "kept dark while Natural Light lights the engines");
+        }
+
         static readonly List<GameObject> tries = new List<GameObject>();
 
         /// <summary>

@@ -34,13 +34,16 @@ if [ -f src/NaturalLight/needs.txt ]; then
   done < src/NaturalLight/needs.txt
 fi
 
-# A companion library for the Harmony mod, where this mod has one (src/NaturalLightHarmony): built against this mod and against
-# Harmony, only where Harmony is installed in the game, and loaded by the game only where it is.
+# A companion library for the Harmony mod, where this mod has one (src/NaturalLightCompanion): built against this mod and against
+# Harmony, only where Harmony is installed in the game, and loaded by the game only where it is. (It was NaturalLightHarmony.dll
+# until 2026-11-20: CKAN takes any library with "Harmony" in its name for a copy of Harmony itself. That file, from a
+# build here before then, goes: a download must not carry it.)
 HARMONY="$KSP_DIR/GameData/000_Harmony/0Harmony.dll"
 companion() {  # companion <folder the mod's own library is in>
-  [ -d src/NaturalLightHarmony ] || return 0
-  if [ -f "$HARMONY" ]; then WITH="$KEYSTONE:$1/NaturalLight.dll:$HARMONY" compile "$1/NaturalLightHarmony.dll" "" src/NaturalLightHarmony
-  else rm -f "$1/NaturalLightHarmony.dll"; echo "left out: NaturalLightHarmony (Harmony is not installed here to build it against)"; fi
+  rm -f "$1/NaturalLightHarmony.dll"
+  [ -d src/NaturalLightCompanion ] || return 0
+  if [ -f "$HARMONY" ]; then WITH="$KEYSTONE:$1/NaturalLight.dll:$HARMONY" compile "$1/NaturalLightCompanion.dll" "" src/NaturalLightCompanion
+  else rm -f "$1/NaturalLightCompanion.dll"; echo "left out: NaturalLightCompanion (Harmony is not installed here to build it against)"; fi
 }
 
 case "$MODE" in
@@ -60,8 +63,8 @@ case "$MODE" in
     if [ "$MODE" = dist ]; then echo "ok: built into $OUT"; exit 0; fi
     mkdir -p "$KSP_DIR/GameData/NaturalLight"
     cp "$OUT/NaturalLight.dll" "$KSP_DIR/GameData/NaturalLight/"
-    rm -f "$KSP_DIR/GameData/NaturalLight/NaturalLightHarmony.dll"
-    [ -f "$OUT/NaturalLightHarmony.dll" ] && cp "$OUT/NaturalLightHarmony.dll" "$KSP_DIR/GameData/NaturalLight/"
+    rm -f "$KSP_DIR/GameData/NaturalLight/NaturalLightHarmony.dll" "$KSP_DIR/GameData/NaturalLight/NaturalLightCompanion.dll"
+    [ -f "$OUT/NaturalLightCompanion.dll" ] && cp "$OUT/NaturalLightCompanion.dll" "$KSP_DIR/GameData/NaturalLight/"
     if [ -d "$OUT/PluginData" ]; then mkdir -p "$KSP_DIR/GameData/NaturalLight/PluginData"; cp -R "$OUT/PluginData/." "$KSP_DIR/GameData/NaturalLight/PluginData/"; fi
     echo "ok: Natural Light installed to $KSP_DIR/GameData/NaturalLight (restart KSP to load it; it needs Keystone there too)"
     ;;

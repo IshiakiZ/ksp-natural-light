@@ -49,6 +49,22 @@ namespace NaturalLight
         /// <summary>How far the camera's eye is open just now, in stops (0 as by day; above that, opened for the dark).</summary>
         public static float Opened;
 
+        /// <summary>
+        /// (Since 2026-11-11.) How far the eye is open for cloud in the light itself, in stops, where no film is at work (0 wherever
+        /// one is): see LightEye. Daylight makes the sky's light and the ground's so much stronger, and it is said to
+        /// every other mod as a number any shader or mod can read (_NaturalLightDayEye: Natural Weather's clouds are drawn so much
+        /// brighter by it).
+        /// </summary>
+        public static float InLight
+        {
+            get => inLight;
+            private set { inLight = value; Shader.SetGlobalFloat(idDayEye, value); }
+        }
+        static float inLight;
+        static readonly int idDayEye = Shader.PropertyToID("_NaturalLightDayEye");
+
+        const float Middle = 0.26f;         // a view this bright (as light) is left as it is
+
         Camera metered;
         float orderLooked = -10f;
         CommandBuffer grab;
@@ -76,6 +92,7 @@ namespace NaturalLight
             Stars(1f, true);
             Unhook();
             Report = "";
+            InLight = 0f;
         }
 
         void Unhook()
@@ -616,12 +633,92 @@ namespace NaturalLight
             return grade;
         }
 
+        string lightEyeSaid = "";
+#if DEV
+        static bool lightEyeOff;
+        /// <summary>(For the development build: the eye's opening for cloud in the light itself, where no film is at work, left out as before 2026-11-11, and back: for pictures of before and after.)</summary>
+        public static string LightEyeOff() { lightEyeOff = !lightEyeOff; return lightEyeOff ? "no eye in the light, as before 2026-11-11" : "the eye opens for cloud in the light where no film is at work"; }
+#endif
+
+        /// <summary>
+        /// The eye's opening for cloud where no film is at work (TUFX not installed, or the film look switched off), since 2026-11-11.
+        ///
+        /// Under cloud the light is what the weather leaves of a clear day's: a thirteenth under a rain's cloud (see Daylight's
+        /// UnderCloud), and the eye opens for that by six tenths of the stops lost, as far as the view is dark (below). But the
+        /// eye was the film's alone, an exposure laid on the finished picture, and with nothing installed that can do that the
+        /// picture was left with the thirteenth: held rain on the pad at noon came out at 51 of 255 where the same view beside
+        /// TUFX is 93 (the PC, 2026-11-11), and with the sun 44 degrees up at 39, which reads as dusk. A rainy noon is not dusk
+        /// to any eye or camera.
+        ///
+        /// So with no film the same opening is had the only other way there is, as Daylight's eye for a low sun and its night
+        /// eyes are had: in the light. The view is measured as for the film (the meter needs nothing of TUFX), the eye opens by
+        /// the same rule and at the same rates, and the sky's light and the ground's are made so many stops stronger (Daylight;
+        /// not the sun's own, of which there is next to none under such cloud: see there), and whatever draws its own light by
+        /// day is told (InLight). The meter reads the picture as lit, with the opening already in it, where the film's reads it
+        /// before its exposure: so the view is taken back by the opening first. The opening is given whole, as slowly as the eye
+        /// moves, and not held to what the weather takes at each moment: held so, it fell and came back within a second and a
+        /// half whenever the weather forgot the cloud for a moment, and the weather's own veil, which goes by how the clouds'
+        /// light has changed since it was last measured, overshot (the sky at 189 of 255 for a second, where it stands at 110).
+        /// By day and for cloud only: the night has Daylight's own eyes, and a lamp or a flame cannot be made brighter from here.
+        /// False where there is none of it (and the meter is not needed).
+        /// </summary>
+        bool LightEye()
+        {
+            float follows = Daylight.Eye != null ? (float)Daylight.Eye : 1f;
+            if (!Daylight.On || !Daylight.Near || follows <= 0f
+#if DEV
+                || lightEyeOff
+#endif
+                ) { InLight = 0f; return false; }
+            // (While the map is up none of the scene's cameras draws, and there is nothing to read: the eye is shut, as the film's
+            // is, and opens again once the map is shut, over four seconds. Left open through the map, as it first was, the picture
+            // came back far too bright for three seconds: the weather's clouds draw themselves afresh then, and for a second and a
+            // half the weather says nine tenths of the sun comes through (Natural Weather's Clouds.Off sets its dimming of the sun
+            // back, and it is eased in again), and the eye's opening on top of that put the sky at 218 of 255 where it stands at
+            // 110 and the picture at 155 where it stands at 90; let answer it, the eye shut by a stop and wavered for five seconds.)
+            if (MapView.MapIsEnabled) { eye = 0f; InLight = 0f; view = float.NaN; brighterSince = float.NaN; return true; }
+            Camera cam = Last();
+#if DEV
+            if (again) { again = false; if (metered != null) Unhook(); }
+#endif
+            if (cam != null && (cam != metered || cam.pixelWidth != wide || cam.pixelHeight != high)) Hook(cam);
+            sunIn = Vector3.zero;
+            float wanted = 0f, before = float.NaN;
+            if (!float.IsNaN(view))
+            {
+                before = view / Mathf.Pow(2f, eye);
+                float dark = Mathf.Max(0f, Mathf.Log(Middle / Mathf.Max(before, 1e-6f), 2f)) * 0.6f * follows;
+                wanted = Mathf.Min(Mathf.Min(0.6f * Daylight.Clouded * follows, dark), Daylight.Of(Daylight.EyeMost, 3.2f) * Mathf.Min(follows, 1.25f));
+            }
+            if (float.IsNaN(wanted) || float.IsInfinity(wanted)) { wanted = float.IsNaN(eye) || float.IsInfinity(eye) ? 0f : eye; badReadings++; }
+            // (a flash of lightning is over before the eye closes for it, as with the film: see below)
+            if (wanted < eye) { if (float.IsNaN(brighterSince)) brighterSince = Time.unscaledTime; if (Time.unscaledTime - brighterSince < 0.6f) wanted = eye; }
+            else brighterSince = float.NaN;
+            float rate = wanted < eye ? Daylight.Of(Daylight.EyeCloses, 3f) : Daylight.Of(Daylight.EyeOpens, 0.45f);
+            eye = Mathf.MoveTowards(eye, wanted, rate * Mathf.Min(Time.unscaledDeltaTime, 0.1f));
+            if (float.IsNaN(eye) || float.IsInfinity(eye)) { eye = 0f; badReadings++; }
+            InLight = eye;
+            lightEyeSaid = "The eye in the light" + (float.IsNaN(view) ? "." : ": the view " + Mathf.LinearToGammaSpace(view).ToString("F2") + " bright (" + Mathf.LinearToGammaSpace(before).ToString("F2") + " before the eye), "
+                + Daylight.Clouded.ToString("F1") + " stops lost to the weather; the light +" + eye.ToString("F1") + " stops.");
+            return true;
+        }
+
         void LateUpdate()
         {
             IFilm film = Wanted ? Film.Best : null;
             Working = Mathf.MoveTowards(Working, film != null && film.Wide ? 1f : 0f, 2f * Mathf.Min(Time.unscaledDeltaTime, 0.1f));
-            if (!Wanted) { if (metered != null) Unhook(); Report = ""; found = float.NaN; view = float.NaN; eye = 0f; Opened = 0f; Stars(1f, true); return; }
-            if (film == null) { if (metered != null) Unhook(); Stars(1f, true); Report = "Film look: " + Film.WhyNot; return; }
+            if (film == null)
+            {
+                // (no film, or none wanted: the eye's opening for cloud is had in the light itself, by day, and nothing else of it)
+                string why = Wanted ? "Film look: " + Film.WhyNot : "";
+                Opened = 0f; Stars(1f, true);
+                if (LightEye()) { Report = (why.Length > 0 ? why + " " : "") + lightEyeSaid; return; }
+                if (metered != null) Unhook();
+                Report = why;
+                if (!Wanted) { found = float.NaN; view = float.NaN; eye = 0f; }
+                return;
+            }
+            InLight = 0f;
 
             // ---- the eye: open for a dark view, closed down for a bright one, and never all the way
             float follows = Daylight.Eye != null ? (float)Daylight.Eye : 1f;
@@ -649,7 +746,6 @@ namespace NaturalLight
             float wanted = 0f;
             if (!float.IsNaN(view) && follows > 0f)
             {
-                const float Middle = 0.26f;                                              // a view this bright (as light) is left as it is
                 // In the dark the eye opens, and what could not be seen can: by six tenths of how dark the whole view is, up to
                 // a little over three stops (nine times the light). But no further than the brightest part of the view can
                 // bear: with a floodlit rocket in sight, or a sunlit one against black space, it stays shut, and everything

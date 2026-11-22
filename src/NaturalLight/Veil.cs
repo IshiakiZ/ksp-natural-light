@@ -85,6 +85,8 @@ namespace NaturalLight
         Color ownWas, sunWas;
         float deckedWas;
         static bool lightAsBefore;
+        /// <summary>(For the development build: how much of a lightning flash's light where the camera is the veil shows, "0.002" as built; "0" none, as before 2026-11-13.)</summary>
+        public static string FlashIn(string arg) { FlashInAir = string.IsNullOrEmpty(arg) ? 0.002f : float.Parse(arg.Trim(), System.Globalization.CultureInfo.InvariantCulture); return "the veil shows " + FlashInAir.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " of a flash's light"; }
         /// <summary>(For the development build: the veil's own light as before 2026-10-25, the light from all round whatever the
         /// clouds over it, and back: for pictures of before and after.)</summary>
         public static string LightAsBefore() { lightAsBefore = !lightAsBefore; return lightAsBefore ? "the veil's light as before 2026-10-25" : "the veil's light from the deck over it"; }
@@ -242,6 +244,13 @@ namespace NaturalLight
                 float white = Mathf.Clamp01((ground.r + ground.g + ground.b) / 3f);
                 around = Color.Lerp(around, deckLight * (0.5f * (1f + white)), decked);
             }
+            // ---- and a flash of lightning's, while it lasts: the rain, snow or fog round the camera lights up with it, as much
+            // as the flash lights the place where the camera stands (the weather mod says that light, Daylight.Flash: less with
+            // the camera's distance from the stroke). What is seen of a veil is mostly the air within its seeing distance of the
+            // camera, so it is lit as one, not by its distance from the channel. A twentieth of the light: the drops send most of
+            // it on, and little back or sideways towards the eye. (Until 2026-11-13 the veil took nothing of a flash: at night
+            // under a storm's rain the whole sky, which is the veil, stayed black through a stroke 2 km off, filmed.)
+            if (FlashInAir > 0f && Daylight.Flash(out Color flash, out Vector3 flashFrom, out float flashRound)) around += flash * FlashInAir;
             Color own = new Color(Mathf.LinearToGammaSpace(Mathf.Max(0f, around.r)), Mathf.LinearToGammaSpace(Mathf.Max(0f, around.g)), Mathf.LinearToGammaSpace(Mathf.Max(0f, around.b)));
             // ---- and the sun's, thrown forward: a third of the sunlight's own brightness looking straight at the sun (none where it is hidden)
             Light sunLight = Sun.Instance != null ? Sun.Instance.sunLight : null;
@@ -284,6 +293,8 @@ namespace NaturalLight
         static string Far(float metres) => metres >= 2000f ? (metres / 1000f).ToString("F0") + " km" : (Mathf.Round(metres / 10f) * 10f).ToString("F0") + " m";
 
         float seaHigh, seaRadius = 600000f;
+        /// <summary>How much of a lightning flash's light where the camera is the veil shows (see LateUpdate; the development build's Veil FlashIn sets it).</summary>
+        internal static float FlashInAir = 0.002f;
         static readonly int idHandAir = Shader.PropertyToID("_WeatherVeilAir"), idHandColour = Shader.PropertyToID("_WeatherVeilColour"), idHandSun = Shader.PropertyToID("_WeatherVeilSun"),
             idHandSunColour = Shader.PropertyToID("_WeatherVeilSunColour"), idSeaVeils = Shader.PropertyToID("_SeaVeilsItself");
 

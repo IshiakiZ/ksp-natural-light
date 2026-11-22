@@ -46,7 +46,7 @@ namespace NaturalLight
     [KSPAddon(KSPAddon.Startup.FlightAndKSC, false)]
     public sealed class Daylight : MonoBehaviour
     {
-        public const string Version = "0.14.0";
+        public const string Version = "0.15.0";
 
         static Mod mod;
         /// <summary>The mod's page in Keystone's window: for the parts of the mod that have something to say on it.</summary>
@@ -209,10 +209,10 @@ namespace NaturalLight
                 Fine(false);
                 Dusk = mod.Toggle("dusk", "Stars come out at dusk", true, "The game hides its stars in air until the sun is far below the horizon and then lets them all out at once, and keeps them dim all night. Here they come out as the sky darkens, the brightest a few minutes after sunset and the faintest at full night, and at night they are as bright as clean air lets them be. Sooner in thin air (Duna), later in thick (Eve). Far worlds and craft come out with them.");
                 mod.Heading("Film");
-                Filmed = mod.Toggle("film", "Film look", true, "The picture developed as a film camera's would be. The game cuts off flat whatever is brighter than white; film lets it roll over into a glow. Contrast is stronger, with the colours left as the light makes them; creases and the places where things meet are darker, and the camera's eye opens and closes with how bright the view is. It is done by the TUFX mod's post-processing, and does nothing where TUFX is not installed.");
+                Filmed = mod.Toggle("film", "Film look", true, "The picture developed as a film camera's would be. The game cuts off flat whatever is brighter than white; film lets it roll over into a glow. Contrast is stronger, with the colours left as the light makes them; creases and the places where things meet are darker, and the camera's eye opens and closes with how bright the view is. It is done by the TUFX mod's post-processing, and does nothing where TUFX is not installed (but for the eye's opening under cloud, which is then had in the light itself: see The camera's eye).");
                 Punch = mod.Slider("punch", "Contrast and colour", 1f, 0f, 2f, "", 2, "How strong the film's contrast is. At 1 the colours are left as the light makes them; above 1 colour is added as well, for a stronger look. 0: the film curve alone.");
                 Glow = mod.Slider("glow", "Glow", 1f, 0f, 2f, "", 2, "The glow round whatever is very bright: a flame, a lamp, sunlight on white paint.");
-                Eye = mod.Slider("eye", "The camera's eye", 1f, 0f, 2f, "", 2, "The exposure follows the view, as an eye or a camera does. In the dark it opens, slowly, and what could not be seen can be (up to three stops, nine times the light). In the light it closes. And it opens no further than the brightest thing in view can bear: with a floodlit rocket or a sunlit planet in sight, everything dark stays dark, stars included. Under cloud (with a weather mod) it opens for the light the clouds take, two or three stops, as a camera's meter does however bright the sky. 0: one exposure always.");
+                Eye = mod.Slider("eye", "The camera's eye", 1f, 0f, 2f, "", 2, "The exposure follows the view, as an eye or a camera does. In the dark it opens, slowly, and what could not be seen can be (up to three stops, nine times the light). In the light it closes. And it opens no further than the brightest thing in view can bear: with a floodlit rocket or a sunlit planet in sight, everything dark stays dark, stars included. Under cloud (with a weather mod) it opens for the light the clouds take, two or three stops, as a camera's meter does however bright the sky; without TUFX that much of it is still had, by day: the sky's light and the weather mod's clouds are made as much brighter as the eye would open. 0: one exposure always.");
                 Fine(true);
                 EyeOpens = mod.Slider("eyeopens", "The eye opens by", 0.45f, 0.05f, 3f, " stops a second", 2, "How fast the camera's eye opens in the dark: slowly, as eyes do, coming out of the light.");
                 EyeCloses = mod.Slider("eyecloses", "The eye closes by", 3f, 0.3f, 12f, " stops a second", 1, "How fast the camera's eye closes down in the light.");
@@ -770,6 +770,7 @@ namespace NaturalLight
             // sky's colour comes from), and more the lower the sun, which then shines through many times as much air.
             Color passes = Color.white;
             float glow = 0f;
+            eyeLight = 1f;
             if (body.atmosphere && height < body.atmosphereDepth)
             {
                 float air = (float)(body.GetPressure(height) / 101.325);                        // in Kerbin's sea-level air
@@ -803,6 +804,18 @@ namespace NaturalLight
                 else
 #endif
                 skyLight = UnderCloud(skyLight, sunUp, cloudSun, cloudSky);
+                // (and where no film is at work, the eye's opening for cloud is had here, in the light: see FilmLook.LightEye. After
+                // the light under cloud is worked out, so that the stops the weather takes, which the eye goes by, are not changed by it.
+                // On the sky's light and the ground's, not on the sun's own: under the cloud the eye opens for there is next to none of
+                // that, and where the weather says for a moment that there is (for a second and a half after its clouds are drawn again
+                // it has forgotten the cloud over the craft, and its shadow's pass puts the picture right), a sun made stronger would
+                // only add to what is wrong then. Tried with the sun's own as well at first: held rain at noon came out the same, 91.7
+                // of 255 with it and 91.1 without.)
+                // (And never to more than a clear day's light: the eye moves slowly, and in such a moment it can stand open two stops
+                // over a weather that says there is hardly a cloud. This did not by itself keep the picture from coming back from the
+                // map too bright, the eye left open through it: see FilmLook.LightEye, where the map now shuts the eye.)
+                eyeLight = Mathf.Min(Mathf.Pow(2f, FilmLook.InLight), 1f / Mathf.Max(cloudShare, 0.001f));
+                skyLight *= eyeLight;
                 // (the sky is the sun's light, scattered: with the sun eclipsed it goes too, all but a little from beyond the shadow)
                 skyLight *= Mathf.Max(Eclipse.Left, 0.0003f);
                 // A sky is all round, not only overhead: what stands upright is lit by the half of it in front, which is three fifths
@@ -845,6 +858,8 @@ namespace NaturalLight
             if (!oldClouds)
 #endif
             lit *= Mathf.Lerp(1f, cloudShare, fills);
+            // (and as the eye is open for cloud in the light, where no film is at work: see FilmLook.LightEye)
+            lit *= eyeLight;
             lit = Mathf.Max(lit, skyLight * 1.5f);                                               // (shaded ground under a bright sky is not black)
             // (half of the light from the ground comes from within the craft's own height of the point beneath it, nine tenths from within
             // three times that: the colour is taken from so much of the ground, and not from all that can be seen)
@@ -1019,6 +1034,7 @@ namespace NaturalLight
         }
 
         float cloudShare = 1f;          // the share of a clear day's light on level ground there is under the weather now
+        float eyeLight = 1f;            // how many times stronger the sky's light and the ground's are made for the eye open in the light (FilmLook.LightEye)
         float clearLightWas, lightWas;  // (a clear day's light on level ground, and the light there now, as light: for the development build's readout)
 
 #if DEV
@@ -1356,7 +1372,7 @@ namespace NaturalLight
 
         /// <summary>A lightning flash's light at this moment (as light), the way it comes from in the scene, and how much of it
         /// comes from all round as well: false where there is none (none said this frame, or a Keystone older than it).</summary>
-        static bool Flash(out Color light, out Vector3 from, out float round)
+        internal static bool Flash(out Color light, out Vector3 from, out float round)
         {
             light = Color.black; from = Vector3.up; round = 0f;
             if (flashMissing) return false;
